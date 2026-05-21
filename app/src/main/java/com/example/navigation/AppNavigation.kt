@@ -1,0 +1,46 @@
+package com.example.navigation
+
+import androidx.compose.runtime.Composable
+import androidx.navigation.compose.NavHost
+import androidx.navigation.compose.composable
+import androidx.navigation.compose.rememberNavController
+import com.example.ui.screens.LoginScreen
+import com.example.ui.screens.SplashScreen
+import com.example.ui.screens.DashboardScreen
+
+@Composable
+fun AppNavigation() {
+    val navController = rememberNavController()
+
+    NavHost(navController = navController, startDestination = "splash") {
+        composable("splash") {
+            SplashScreen(
+                onNavigateToLogin = {
+                    navController.navigate("login") {
+                        popUpTo("splash") { inclusive = true }
+                    }
+                }
+            )
+        }
+        composable("login") {
+            LoginScreen(
+                onLoginSuccess = { role ->
+                    navController.navigate("dashboard/$role") {
+                        popUpTo("login") { inclusive = true }
+                    }
+                }
+            )
+        }
+        composable("dashboard/{role}") { backStackEntry ->
+            val role = backStackEntry.arguments?.getString("role") ?: "Admin"
+            DashboardScreen(
+                role = role,
+                onLogout = {
+                    navController.navigate("login") {
+                        popUpTo("login") { inclusive = true }
+                    }
+                }
+            )
+        }
+    }
+}

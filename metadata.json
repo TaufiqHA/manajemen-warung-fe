@@ -1,0 +1,6 @@
+{
+  "name": "Warung Manager",
+  "description": "Aplikasi manajemen warung makanan untuk pencatatan penjualan dan biaya operasional.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
