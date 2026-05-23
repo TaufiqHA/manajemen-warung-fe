@@ -11,6 +11,8 @@ import androidx.compose.ui.Modifier
 import com.example.navigation.AppNavigation
 import com.example.ui.theme.MyApplicationTheme
 
+import androidx.compose.material3.Text
+
 class MainActivity : ComponentActivity() {
   override fun onCreate(savedInstanceState: Bundle?) {
     super.onCreate(savedInstanceState)
@@ -21,7 +23,7 @@ class MainActivity : ComponentActivity() {
             modifier = Modifier.fillMaxSize(),
             color = MaterialTheme.colorScheme.background
         ) {
-            AppNavigation()
+            Text("Test Isolasi UI")
         }
       }
     }
