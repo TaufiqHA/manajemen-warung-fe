@@ -38,7 +38,7 @@ private val LightColorScheme = lightColorScheme(
 
 @Composable
 fun MyApplicationTheme(
-    darkTheme: Boolean = isSystemInDarkTheme(),
+    darkTheme: Boolean = false, // Forced to false to ensure white base color as requested by user
     // Disable dynamic colors by default to enforce brand colors
     dynamicColor: Boolean = false,
     content: @Composable () -> Unit,
