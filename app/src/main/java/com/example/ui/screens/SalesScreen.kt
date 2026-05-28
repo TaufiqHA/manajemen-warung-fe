@@ -14,16 +14,24 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.example.data.InvoiceItem
+import com.example.data.Transaction
+import com.example.data.TransactionModel
 import com.example.ui.theme.DangerColor
 import com.example.ui.theme.SuccessColor
 import com.example.ui.viewmodel.SalesViewModel
 import com.example.utils.formatRupiah
+import com.example.utils.generateQuotationPdf
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -31,6 +39,7 @@ fun SalesScreen(
     onBack: () -> Unit,
     viewModel: SalesViewModel = viewModel()
 ) {
+    val context = LocalContext.current
     val searchQuery by viewModel.searchQuery.collectAsState()
     val isExpanded by viewModel.isDropdownExpanded.collectAsState()
     val filteredItems by viewModel.filteredItems.collectAsState()
@@ -40,6 +49,7 @@ fun SalesScreen(
     
     var showReceiptDialog by remember { mutableStateOf(false) }
     var receiptText by remember { mutableStateOf("") }
+    var currentTransaction by remember { mutableStateOf<Transaction?>(null) }
 
     Scaffold(
         topBar = {
@@ -181,6 +191,7 @@ fun SalesScreen(
                 onClick = {
                     if (viewModel.cartItems.isNotEmpty()) {
                         val transaction = viewModel.processTransaction()
+                        currentTransaction = transaction
                         receiptText = viewModel.formatReceipt(transaction)
                         showReceiptDialog = true
                     }
@@ -220,6 +231,32 @@ fun SalesScreen(
                         lineHeight = 16.sp,
                         color = Color.Black
                     )
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = {
+                    currentTransaction?.let { trx ->
+                        val quotationData = TransactionModel(
+                            customerName = "Pelanggan Umum",
+                            customerAddress = "Jl. Raya Warung No. 123",
+                            items = trx.items.map { 
+                                InvoiceItem(
+                                    name = it.namaBarang,
+                                    qty = it.qty,
+                                    price = it.harga.toDouble()
+                                )
+                            },
+                            salesName = "Admin Warung",
+                            invoiceCode = trx.kodeTransaksi,
+                            date = SimpleDateFormat("dd/MM/yyyy", Locale.getDefault()).format(Date(trx.tanggalTransaksi)),
+                            notes = "Terima kasih atas kunjungan Anda."
+                        )
+                        generateQuotationPdf(context, quotationData)
+                    }
+                }) {
+                    Icon(Icons.Default.PictureAsPdf, contentDescription = null)
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("Export PDF")
                 }
             },
             confirmButton = {

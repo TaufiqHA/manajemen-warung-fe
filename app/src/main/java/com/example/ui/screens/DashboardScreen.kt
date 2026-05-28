@@ -168,7 +168,8 @@ fun DashboardScreen(
     role: UserRole, 
     onLogout: () -> Unit, 
     onNavigateToSales: () -> Unit,
-    onNavigateToMonthlyReport: () -> Unit
+    onNavigateToMonthlyReport: () -> Unit,
+    onNavigateToSettings: () -> Unit
 ) {
     var activeTab by remember { mutableStateOf(DashboardTab.Beranda) }
     
@@ -2007,6 +2008,29 @@ fun BarangTabContent(
                         val h = hargaMenu.toDoubleOrNull() ?: 0.0
                         if (namaMenu.isNotBlank() && h > 0) {
                             menuList.add(MenuItem(java.util.UUID.randomUUID().toString(), namaMenu, h))
+                            showAddMenuForm = false
+                            coroutineScope.launch {
+                                snackbarHostState.showSnackbar("Barang berhasil ditambahkan")
+                            }
+                        }
+                    }) {
+                        Text("Simpan")
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { showAddMenuForm = false }) {
+                        Text("Batal")
+                    }
+                }
+            )
+        }
+    }
+}
+           )
+        }
+    }
+}
+andomUUID().toString(), namaMenu, h))
                             showAddMenuForm = false
                             coroutineScope.launch {
                                 snackbarHostState.showSnackbar("Barang berhasil ditambahkan")

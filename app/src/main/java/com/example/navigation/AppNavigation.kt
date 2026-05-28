@@ -50,11 +50,21 @@ fun AppNavigation() {
                 },
                 onNavigateToMonthlyReport = {
                     navController.navigate("monthly_report")
+                },
+                onNavigateToSettings = {
+                    navController.navigate("settings")
                 }
             )
         }
         composable("sales") {
             SalesScreen(
+                onBack = {
+                    navController.popBackStack()
+                }
+            )
+        }
+        composable("settings") {
+            SettingsScreen(
                 onBack = {
                     navController.popBackStack()
                 }
