@@ -7,6 +7,7 @@ import androidx.navigation.compose.rememberNavController
 import com.example.ui.screens.LoginScreen
 import com.example.ui.screens.SplashScreen
 import com.example.ui.screens.DashboardScreen
+import com.example.ui.screens.SalesScreen
 
 @Composable
 fun AppNavigation() {
@@ -39,6 +40,16 @@ fun AppNavigation() {
                     navController.navigate("login") {
                         popUpTo("login") { inclusive = true }
                     }
+                },
+                onNavigateToSales = {
+                    navController.navigate("sales")
+                }
+            )
+        }
+        composable("sales") {
+            SalesScreen(
+                onBack = {
+                    navController.popBackStack()
                 }
             )
         }

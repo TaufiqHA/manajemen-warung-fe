@@ -35,6 +35,7 @@ import com.example.ui.theme.DangerColor
 import com.example.ui.theme.SuccessColor
 import com.example.ui.theme.InfoColor
 import com.example.ui.theme.PrimaryColor
+import com.example.utils.formatRupiah
 import java.text.NumberFormat
 import java.util.Locale
 
@@ -75,7 +76,7 @@ data class BiayaOperasional(
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun DashboardScreen(role: String, onLogout: () -> Unit) {
+fun DashboardScreen(role: String, onLogout: () -> Unit, onNavigateToSales: () -> Unit) {
     var activeTab by remember { mutableStateOf(DashboardTab.Beranda) }
     
     // Live State Lists for local mockup persistence
@@ -170,7 +171,8 @@ fun DashboardScreen(role: String, onLogout: () -> Unit) {
                         role = role,
                         transaksiList = transaksiList,
                         menuList = menuList,
-                        snackbarHostState = snackbarHostState
+                        snackbarHostState = snackbarHostState,
+                        onNavigateToSales = onNavigateToSales
                     )
                 }
                 DashboardTab.LabaRugi -> {
@@ -198,12 +200,6 @@ fun DashboardScreen(role: String, onLogout: () -> Unit) {
             }
         }
     }
-}
-
-// ------------------------- HELPERS -------------------------
-fun formatRupiah(amount: Double): String {
-    val format = NumberFormat.getCurrencyInstance(Locale("in", "ID"))
-    return format.format(amount).replace("Rp", "Rp ").replace(",00", "")
 }
 
 // ------------------------- 1. BERANDA TAB -------------------------
@@ -378,6 +374,7 @@ fun PenjualanTabContent(
     transaksiList: MutableList<TransaksiHarian>,
     menuList: MutableList<MenuItem>,
     snackbarHostState: SnackbarHostState,
+    onNavigateToSales: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     var showActionChooser by remember { mutableStateOf(false) }
@@ -571,7 +568,10 @@ fun PenjualanTabContent(
                         verticalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
                         Button(
-                            onClick = { showActionChooser = false; showAddForm = true },
+                            onClick = { 
+                                showActionChooser = false
+                                onNavigateToSales()
+                            },
                             modifier = Modifier.fillMaxWidth()
                         ) {
                             Text("Tambah Transaksi Penjualan")
