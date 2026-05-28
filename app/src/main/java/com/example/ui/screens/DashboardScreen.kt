@@ -44,10 +44,59 @@ import java.util.Locale
 enum class DashboardTab(val label: String) {
     Beranda("Beranda"),
     Penjualan("Penjualan"),
+    ManajemenBarang("Manajemen Barang"),
     LabaRugi("Laba Rugi"),
     Biaya("Biaya"),
-    Profil("Profil")
+    Profil("Profile")
 }
+
+// Struktur data untuk setiap item menu
+data class DashboardMenu(
+    val title: String,
+    val icon: androidx.compose.ui.graphics.vector.ImageVector,
+    val tab: DashboardTab,
+    val allowedRoles: List<UserRole>
+)
+
+// Konfigurasi hak akses menu
+val allMenus = listOf(
+    DashboardMenu(
+        title = "Beranda",
+        icon = Icons.Filled.Home,
+        tab = DashboardTab.Beranda,
+        allowedRoles = listOf(UserRole.OWNER, UserRole.ADMIN_TOKO, UserRole.ADMIN_KANTOR)
+    ),
+    DashboardMenu(
+        title = "Laba Rugi",
+        icon = Icons.Filled.TrendingUp,
+        tab = DashboardTab.LabaRugi,
+        allowedRoles = listOf(UserRole.OWNER)
+    ),
+    DashboardMenu(
+        title = "Profile",
+        icon = Icons.Filled.Person,
+        tab = DashboardTab.Profil,
+        allowedRoles = listOf(UserRole.OWNER)
+    ),
+    DashboardMenu(
+        title = "Penjualan",
+        icon = Icons.Filled.ShoppingCart,
+        tab = DashboardTab.Penjualan,
+        allowedRoles = listOf(UserRole.ADMIN_TOKO)
+    ),
+    DashboardMenu(
+        title = "Manajemen Barang",
+        icon = Icons.Filled.Inventory,
+        tab = DashboardTab.ManajemenBarang,
+        allowedRoles = listOf(UserRole.ADMIN_TOKO)
+    ),
+    DashboardMenu(
+        title = "Biaya Operasional",
+        icon = Icons.Filled.Payments,
+        tab = DashboardTab.Biaya,
+        allowedRoles = listOf(UserRole.ADMIN_KANTOR)
+    )
+)
 
 // Structures for stateful interaction
 data class MenuItem(
@@ -75,10 +124,48 @@ data class BiayaOperasional(
     val pembuat: String
 )
 
+@Composable
+fun MenuCard(
+    title: String,
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Card(
+        modifier = modifier
+            .fillMaxWidth()
+            .height(100.dp)
+            .clickable { onClick() },
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+    ) {
+        Column(
+            modifier = Modifier.fillMaxSize().padding(12.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = title,
+                tint = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.size(32.dp)
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+            Text(
+                text = title,
+                style = MaterialTheme.typography.labelLarge,
+                fontWeight = FontWeight.Bold,
+                textAlign = TextAlign.Center
+            )
+        }
+    }
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun DashboardScreen(role: UserRole, onLogout: () -> Unit, onNavigateToSales: () -> Unit) {
-    var activeTab by remember { mutableStateOf(if (role == UserRole.ADMIN_KANTOR) DashboardTab.Biaya else DashboardTab.Beranda) }
+    var activeTab by remember { mutableStateOf(DashboardTab.Beranda) }
     
     // Live State Lists for local mockup persistence
     val menuList = remember {
@@ -92,18 +179,18 @@ fun DashboardScreen(role: UserRole, onLogout: () -> Unit, onNavigateToSales: () 
 
     val transaksiList = remember {
         mutableStateListOf(
-            TransaksiHarian("1", "Mie Ayam Extra Pedas", 3, 15000.0, "08:30", "Admin", "Pedas level 5"),
+            TransaksiHarian("1", "Mie Ayam Extra Pedas", 3, 15000.0, "08:30", "Admin Toko", "Pedas level 5"),
             TransaksiHarian("2", "Nasi Goreng Spesial", 2, 18000.0, "09:15", "Owner", ""),
-            TransaksiHarian("3", "Es Teh Manis Jumbo", 4, 4000.0, "11:00", "Admin", "Es dikit"),
+            TransaksiHarian("3", "Es Teh Manis Jumbo", 4, 4000.0, "11:00", "Admin Toko", "Es dikit"),
             TransaksiHarian("4", "Ayam Bakar Madu", 2, 22000.0, "12:15", "Owner", "")
         )
     }
 
     val biayaList = remember {
         mutableStateListOf(
-            BiayaOperasional("1", "Bahan Baku", "Beli daging ayam & bumbu dapur", 350000.0, "21 Mei 2026", "Admin"),
+            BiayaOperasional("1", "Bahan Baku", "Beli daging ayam & bumbu dapur", 350000.0, "21 Mei 2026", "Admin Toko"),
             BiayaOperasional("2", "Listrik", "Tagihan listrik bulanan toko", 280000.0, "20 Mei 2026", "Owner"),
-            BiayaOperasional("3", "Air", "Pembayaran bulanan PAM", 120000.0, "18 Mei 2026", "Admin")
+            BiayaOperasional("3", "Air", "Pembayaran bulanan PAM", 120000.0, "18 Mei 2026", "Admin Toko")
         )
     }
 
@@ -127,13 +214,9 @@ fun DashboardScreen(role: UserRole, onLogout: () -> Unit, onNavigateToSales: () 
     val snackbarHostState = remember { SnackbarHostState() }
     val coroutineScope = rememberCoroutineScope()
 
-    // Tab representation list filtered by authorization role
-    val tabsToShow = remember(role) {
-        when (role) {
-            UserRole.OWNER -> listOf(DashboardTab.Beranda, DashboardTab.Penjualan, DashboardTab.LabaRugi, DashboardTab.Biaya, DashboardTab.Profil)
-            UserRole.ADMIN_KANTOR -> listOf(DashboardTab.Biaya, DashboardTab.Profil)
-            else -> listOf(DashboardTab.Beranda, DashboardTab.Penjualan, DashboardTab.Biaya, DashboardTab.Profil)
-        }
+    // Filter menus based on role
+    val visibleMenus = remember(role) {
+        allMenus.filter { it.allowedRoles.contains(role) }
     }
 
     Scaffold(
@@ -142,20 +225,13 @@ fun DashboardScreen(role: UserRole, onLogout: () -> Unit, onNavigateToSales: () 
                 containerColor = MaterialTheme.colorScheme.surface,
                 tonalElevation = 8.dp
             ) {
-                tabsToShow.forEach { tab ->
-                    val isSelected = activeTab == tab
-                    val icon = when (tab) {
-                        DashboardTab.Beranda -> Icons.Filled.Home
-                        DashboardTab.Penjualan -> Icons.Filled.ShoppingCart
-                        DashboardTab.LabaRugi -> Icons.Filled.TrendingUp
-                        DashboardTab.Biaya -> Icons.Filled.Payments
-                        DashboardTab.Profil -> Icons.Filled.Person
-                    }
+                visibleMenus.forEach { menu ->
+                    val isSelected = activeTab == menu.tab
                     NavigationBarItem(
                         selected = isSelected,
-                        onClick = { activeTab = tab },
-                        icon = { Icon(imageVector = icon, contentDescription = tab.label) },
-                        label = { Text(tab.label, style = MaterialTheme.typography.labelMedium) }
+                        onClick = { activeTab = menu.tab },
+                        icon = { Icon(imageVector = menu.icon, contentDescription = menu.title) },
+                        label = { Text(menu.title, style = MaterialTheme.typography.labelMedium) }
                     )
                 }
             }
@@ -174,9 +250,11 @@ fun DashboardScreen(role: UserRole, onLogout: () -> Unit, onNavigateToSales: () 
                         role = role.displayName,
                         userName = userName,
                         transaksiList = transaksiList,
+                        visibleMenus = visibleMenus,
                         onNavigateTab = { activeTab = it },
                         snackbarHostState = snackbarHostState,
-                        biayaList = biayaList
+                        biayaList = biayaList,
+                        onLogoutClick = if (role != UserRole.OWNER) onLogout else null
                     )
                 }
                 DashboardTab.Penjualan -> {
@@ -186,6 +264,12 @@ fun DashboardScreen(role: UserRole, onLogout: () -> Unit, onNavigateToSales: () 
                         menuList = menuList,
                         snackbarHostState = snackbarHostState,
                         onNavigateToSales = onNavigateToSales
+                    )
+                }
+                DashboardTab.ManajemenBarang -> {
+                    BarangTabContent(
+                        menuList = menuList,
+                        snackbarHostState = snackbarHostState
                     )
                 }
                 DashboardTab.LabaRugi -> {
@@ -222,8 +306,10 @@ fun BerandaTabContent(
     userName: String,
     transaksiList: List<TransaksiHarian>,
     biayaList: List<BiayaOperasional>,
+    visibleMenus: List<DashboardMenu>,
     onNavigateTab: (DashboardTab) -> Unit,
     snackbarHostState: SnackbarHostState,
+    onLogoutClick: (() -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     val coroutineScope = rememberCoroutineScope()
@@ -265,12 +351,24 @@ fun BerandaTabContent(
                     )
                 }
             }
-            Icon(
-                imageVector = Icons.Filled.Storefront,
-                contentDescription = "Store icon",
-                tint = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.size(36.dp)
-            )
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                if (onLogoutClick != null) {
+                    IconButton(onClick = onLogoutClick) {
+                        Icon(
+                            imageVector = Icons.Filled.ExitToApp,
+                            contentDescription = "Logout",
+                            tint = DangerColor
+                        )
+                    }
+                    Spacer(modifier = Modifier.width(8.dp))
+                }
+                Icon(
+                    imageVector = Icons.Filled.Storefront,
+                    contentDescription = "Store icon",
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(36.dp)
+                )
+            }
         }
 
         Spacer(modifier = Modifier.height(24.dp))
@@ -314,6 +412,33 @@ fun BerandaTabContent(
                     text = "${transaksiList.size} Transaksi Berhasil",
                     style = MaterialTheme.typography.labelMedium,
                     color = SuccessColor
+                )
+            }
+        }
+
+        Spacer(modifier = Modifier.height(24.dp))
+        Text(
+            text = "MENU AKSES",
+            style = MaterialTheme.typography.titleSmall,
+            fontWeight = FontWeight.Bold
+        )
+        Spacer(modifier = Modifier.height(12.dp))
+
+        // Menu Grid for Quick Access
+        val quickMenus = visibleMenus.filter { it.tab != DashboardTab.Beranda }
+        androidx.compose.foundation.lazy.grid.LazyVerticalGrid(
+            columns = androidx.compose.foundation.lazy.grid.GridCells.Fixed(2),
+            modifier = Modifier.height(if (quickMenus.size > 2) 220.dp else 110.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+            userScrollEnabled = false // Fixed height and no internal scroll
+        ) {
+            items(quickMenus.size) { index ->
+                val menu = quickMenus[index]
+                MenuCard(
+                    title = menu.title,
+                    icon = menu.icon,
+                    onClick = { onNavigateTab(menu.tab) }
                 )
             }
         }
@@ -1830,6 +1955,127 @@ fun LabaRugiTabContent(
                     )
                 }
             }
+        }
+    }
+}
+
+// ------------------------- 6. MANAJEMEN BARANG TAB -------------------------
+@Composable
+fun BarangTabContent(
+    menuList: MutableList<MenuItem>,
+    snackbarHostState: SnackbarHostState,
+    modifier: Modifier = Modifier
+) {
+    var showAddMenuForm by remember { mutableStateOf(false) }
+    val coroutineScope = rememberCoroutineScope()
+
+    Box(modifier = modifier.fillMaxSize()) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(16.dp)
+        ) {
+            Spacer(modifier = Modifier.height(28.dp))
+            Text(
+                text = "Manajemen Barang",
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.Bold
+            )
+            Spacer(modifier = Modifier.height(16.dp))
+
+            if (menuList.isEmpty()) {
+                Box(modifier = Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
+                    Text("Belum ada data barang", color = Color.Gray)
+                }
+            } else {
+                LazyColumn(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    items(menuList) { item ->
+                        Card(
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                            shape = RoundedCornerShape(8.dp)
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(16.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Column {
+                                    Text(item.nama, fontWeight = FontWeight.Bold)
+                                    Text(formatRupiah(item.harga), style = MaterialTheme.typography.bodySmall, color = Color.Gray)
+                                }
+                                IconButton(onClick = { 
+                                    menuList.remove(item)
+                                    coroutineScope.launch {
+                                        snackbarHostState.showSnackbar("Barang berhasil dihapus")
+                                    }
+                                }) {
+                                    Icon(Icons.Filled.Delete, contentDescription = "Hapus", tint = DangerColor)
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        FloatingActionButton(
+            onClick = { showAddMenuForm = true },
+            modifier = Modifier
+                .align(Alignment.BottomEnd)
+                .padding(24.dp),
+            containerColor = MaterialTheme.colorScheme.primary
+        ) {
+            Icon(Icons.Filled.Add, contentDescription = "Tambah Barang", tint = Color.White)
+        }
+
+        if (showAddMenuForm) {
+            var namaMenu by remember { mutableStateOf("") }
+            var hargaMenu by remember { mutableStateOf("") }
+
+            AlertDialog(
+                onDismissRequest = { showAddMenuForm = false },
+                title = { Text("Tambah Barang Baru") },
+                text = {
+                    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                        OutlinedTextField(
+                            value = namaMenu,
+                            onValueChange = { namaMenu = it },
+                            label = { Text("Nama Barang") },
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                        OutlinedTextField(
+                            value = hargaMenu,
+                            onValueChange = { hargaMenu = it },
+                            label = { Text("Harga") },
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    }
+                },
+                confirmButton = {
+                    Button(onClick = {
+                        val h = hargaMenu.toDoubleOrNull() ?: 0.0
+                        if (namaMenu.isNotBlank() && h > 0) {
+                            menuList.add(MenuItem(java.util.UUID.randomUUID().toString(), namaMenu, h))
+                            showAddMenuForm = false
+                            coroutineScope.launch {
+                                snackbarHostState.showSnackbar("Barang berhasil ditambahkan")
+                            }
+                        }
+                    }) {
+                        Text("Simpan")
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { showAddMenuForm = false }) {
+                        Text("Batal")
+                    }
+                }
+            )
         }
     }
 }
