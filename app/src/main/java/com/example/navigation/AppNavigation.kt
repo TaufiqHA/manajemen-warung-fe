@@ -8,6 +8,7 @@ import com.example.ui.screens.LoginScreen
 import com.example.ui.screens.SplashScreen
 import com.example.ui.screens.DashboardScreen
 import com.example.ui.screens.SalesScreen
+import com.example.data.UserRole
 
 @Composable
 fun AppNavigation() {
@@ -26,14 +27,15 @@ fun AppNavigation() {
         composable("login") {
             LoginScreen(
                 onLoginSuccess = { role ->
-                    navController.navigate("dashboard/$role") {
+                    navController.navigate("dashboard/${role.name}") {
                         popUpTo("login") { inclusive = true }
                     }
                 }
             )
         }
         composable("dashboard/{role}") { backStackEntry ->
-            val role = backStackEntry.arguments?.getString("role") ?: "Admin"
+            val roleString = backStackEntry.arguments?.getString("role") ?: UserRole.ADMIN_TOKO.name
+            val role = try { UserRole.valueOf(roleString) } catch (e: Exception) { UserRole.ADMIN_TOKO }
             DashboardScreen(
                 role = role,
                 onLogout = {

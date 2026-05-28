@@ -8,7 +8,12 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ExposedDropdownMenuBox
+import androidx.compose.material3.ExposedDropdownMenuDefaults
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -16,7 +21,49 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
+import com.example.data.Item
 import com.example.ui.theme.DangerColor
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun AutocompleteItemDropdown(
+    query: String,
+    onQueryChanged: (String) -> Unit,
+    isExpanded: Boolean,
+    onExpandedChanged: (Boolean) -> Unit,
+    filteredItems: List<Item>,
+    onItemSelected: (Item) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    ExposedDropdownMenuBox(
+        expanded = isExpanded,
+        onExpandedChange = { onExpandedChanged(it) },
+        modifier = modifier
+    ) {
+        OutlinedTextField(
+            value = query,
+            onValueChange = { onQueryChanged(it) },
+            label = { Text("Nama Barang") },
+            modifier = Modifier.menuAnchor().fillMaxWidth(),
+            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = isExpanded) },
+            colors = ExposedDropdownMenuDefaults.outlinedTextFieldColors()
+        )
+
+        if (filteredItems.isNotEmpty() && query.isNotBlank()) {
+            ExposedDropdownMenu(
+                expanded = isExpanded,
+                onDismissRequest = { onExpandedChanged(false) }
+            ) {
+                filteredItems.forEach { item ->
+                    DropdownMenuItem(
+                        text = { Text(item.name) },
+                        onClick = { onItemSelected(item) }
+                    )
+                }
+            }
+        }
+    }
+}
 
 @Composable
 fun ConfirmDialog(

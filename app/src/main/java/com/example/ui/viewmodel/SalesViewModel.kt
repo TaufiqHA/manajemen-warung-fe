@@ -2,14 +2,65 @@ package com.example.ui.viewmodel
 
 import androidx.compose.runtime.mutableStateListOf
 import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
+import com.example.data.Item
 import com.example.data.Transaction
 import com.example.data.TransactionItem
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.stateIn
 import java.text.SimpleDateFormat
 import java.util.*
 
 class SalesViewModel : ViewModel() {
     private val _cartItems = mutableStateListOf<TransactionItem>()
     val cartItems: List<TransactionItem> = _cartItems
+
+    // --- Autocomplete State ---
+    private val _allItems = MutableStateFlow<List<Item>>(listOf(
+        Item("1", "Indomie Goreng", 3000),
+        Item("2", "Kopi Kapal Api", 1500),
+        Item("3", "Beras 5kg", 65000),
+        Item("4", "Gula Pasir 1kg", 16000),
+        Item("5", "Telur Ayam 1kg", 28000),
+        Item("6", "Minyak Goreng 2L", 35000),
+        Item("7", "Teh Pucuk", 3500),
+        Item("8", "Aqua 600ml", 3000),
+        Item("9", "Roti Tawar", 15000),
+        Item("10", "Susu Kental Manis", 12000)
+    )) 
+   
+    private val _searchQuery = MutableStateFlow("")
+    val searchQuery = _searchQuery.asStateFlow()
+
+    private val _isDropdownExpanded = MutableStateFlow(false)
+    val isDropdownExpanded = _isDropdownExpanded.asStateFlow()
+
+    val filteredItems = combine(_allItems, _searchQuery) { items, query ->
+        if (query.isBlank()) {
+            items
+        } else {
+            items.filter { it.name.contains(query, ignoreCase = true) }
+        }
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    fun onSearchQueryChanged(query: String) {
+        _searchQuery.value = query
+        _isDropdownExpanded.value = true
+    }
+
+    fun onDropdownExpandedChanged(expanded: Boolean) {
+        _isDropdownExpanded.value = expanded
+    }
+
+    fun onItemSelected(item: Item, onPriceUpdate: (Long) -> Unit) {
+        _searchQuery.value = item.name 
+        _isDropdownExpanded.value = false 
+        onPriceUpdate(item.price)
+    }
+    // --------------------------
 
     val totalHarga: Long
         get() = _cartItems.sumOf { it.subTotal }

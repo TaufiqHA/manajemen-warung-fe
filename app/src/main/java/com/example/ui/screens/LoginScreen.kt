@@ -50,12 +50,13 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import com.example.ui.components.PrimaryButton
+import com.example.data.UserRole
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun LoginScreen(onLoginSuccess: (String) -> Unit) {
+fun LoginScreen(onLoginSuccess: (UserRole) -> Unit) {
     var email by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
     var emailError by remember { mutableStateOf(false) }
@@ -82,8 +83,12 @@ fun LoginScreen(onLoginSuccess: (String) -> Unit) {
                 // Simulate network call
                 delay(1200)
                 isLoading = false
-                if (email == "owner@warung.com" || email == "admin@warung.com") { // Simple mock condition for now
-                    val role = if (email == "owner@warung.com") "Owner" else "Admin"
+                if (email == "owner@warung.com" || email == "admin@warung.com" || email == "adminkantor@warung.com") {
+                    val role = when (email) {
+                        "owner@warung.com" -> UserRole.OWNER
+                        "adminkantor@warung.com" -> UserRole.ADMIN_KANTOR
+                        else -> UserRole.ADMIN_TOKO
+                    }
                     onLoginSuccess(role)
                 } else {
                     snackbarHostState.showSnackbar("Email atau password salah")

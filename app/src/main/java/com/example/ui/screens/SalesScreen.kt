@@ -31,7 +31,10 @@ fun SalesScreen(
     onBack: () -> Unit,
     viewModel: SalesViewModel = viewModel()
 ) {
-    var namaBarang by remember { mutableStateOf("") }
+    val searchQuery by viewModel.searchQuery.collectAsState()
+    val isExpanded by viewModel.isDropdownExpanded.collectAsState()
+    val filteredItems by viewModel.filteredItems.collectAsState()
+
     var qty by remember { mutableStateOf("1") }
     var harga by remember { mutableStateOf("") }
     
@@ -67,10 +70,17 @@ fun SalesScreen(
                 ) {
                     Text("Tambah Barang", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                     
-                    OutlinedTextField(
-                        value = namaBarang,
-                        onValueChange = { namaBarang = it },
-                        label = { Text("Nama Barang") },
+                    com.example.ui.components.AutocompleteItemDropdown(
+                        query = searchQuery,
+                        onQueryChanged = { viewModel.onSearchQueryChanged(it) },
+                        isExpanded = isExpanded,
+                        onExpandedChanged = { viewModel.onDropdownExpandedChanged(it) },
+                        filteredItems = filteredItems,
+                        onItemSelected = { selectedItem -> 
+                            viewModel.onItemSelected(selectedItem) { price ->
+                                harga = price.toString()
+                            }
+                        },
                         modifier = Modifier.fillMaxWidth()
                     )
                     
@@ -95,10 +105,10 @@ fun SalesScreen(
                         onClick = {
                             val q = qty.toIntOrNull() ?: 0
                             val h = harga.toLongOrNull() ?: 0L
-                            if (namaBarang.isNotBlank() && q > 0 && h > 0) {
-                                viewModel.addToCart(namaBarang, q, h)
+                            if (searchQuery.isNotBlank() && q > 0 && h > 0) {
+                                viewModel.addToCart(searchQuery, q, h)
                                 // Reset fields
-                                namaBarang = ""
+                                viewModel.onSearchQueryChanged("")
                                 qty = "1"
                                 harga = ""
                             }

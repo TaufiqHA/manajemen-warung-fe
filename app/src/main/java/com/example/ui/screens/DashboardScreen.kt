@@ -36,6 +36,7 @@ import com.example.ui.theme.SuccessColor
 import com.example.ui.theme.InfoColor
 import com.example.ui.theme.PrimaryColor
 import com.example.utils.formatRupiah
+import com.example.data.UserRole
 import java.text.NumberFormat
 import java.util.Locale
 
@@ -76,8 +77,8 @@ data class BiayaOperasional(
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun DashboardScreen(role: String, onLogout: () -> Unit, onNavigateToSales: () -> Unit) {
-    var activeTab by remember { mutableStateOf(DashboardTab.Beranda) }
+fun DashboardScreen(role: UserRole, onLogout: () -> Unit, onNavigateToSales: () -> Unit) {
+    var activeTab by remember { mutableStateOf(if (role == UserRole.ADMIN_KANTOR) DashboardTab.Biaya else DashboardTab.Beranda) }
     
     // Live State Lists for local mockup persistence
     val menuList = remember {
@@ -107,8 +108,20 @@ fun DashboardScreen(role: String, onLogout: () -> Unit, onNavigateToSales: () ->
     }
 
     // Role parameters
-    var userName by remember { mutableStateOf(if (role == "Owner") "Budi Santoso" else "Siti Aminah") }
-    val userEmail = if (role == "Owner") "budi@warung.com" else "siti@warung.com"
+    var userName by remember { 
+        mutableStateOf(
+            when (role) {
+                UserRole.OWNER -> "Budi Santoso"
+                UserRole.ADMIN_KANTOR -> "Andi Kantor"
+                else -> "Siti Aminah"
+            }
+        ) 
+    }
+    val userEmail = when (role) {
+        UserRole.OWNER -> "owner@warung.com"
+        UserRole.ADMIN_KANTOR -> "adminkantor@warung.com"
+        else -> "admin@warung.com"
+    }
 
     // UI Feedback Overlay (Toast-like snackbars)
     val snackbarHostState = remember { SnackbarHostState() }
@@ -116,10 +129,10 @@ fun DashboardScreen(role: String, onLogout: () -> Unit, onNavigateToSales: () ->
 
     // Tab representation list filtered by authorization role
     val tabsToShow = remember(role) {
-        if (role == "Owner") {
-            listOf(DashboardTab.Beranda, DashboardTab.Penjualan, DashboardTab.LabaRugi, DashboardTab.Biaya, DashboardTab.Profil)
-        } else {
-            listOf(DashboardTab.Beranda, DashboardTab.Penjualan, DashboardTab.Biaya, DashboardTab.Profil)
+        when (role) {
+            UserRole.OWNER -> listOf(DashboardTab.Beranda, DashboardTab.Penjualan, DashboardTab.LabaRugi, DashboardTab.Biaya, DashboardTab.Profil)
+            UserRole.ADMIN_KANTOR -> listOf(DashboardTab.Biaya, DashboardTab.Profil)
+            else -> listOf(DashboardTab.Beranda, DashboardTab.Penjualan, DashboardTab.Biaya, DashboardTab.Profil)
         }
     }
 
@@ -158,7 +171,7 @@ fun DashboardScreen(role: String, onLogout: () -> Unit, onNavigateToSales: () ->
             when (activeTab) {
                 DashboardTab.Beranda -> {
                     BerandaTabContent(
-                        role = role,
+                        role = role.displayName,
                         userName = userName,
                         transaksiList = transaksiList,
                         onNavigateTab = { activeTab = it },
@@ -168,7 +181,7 @@ fun DashboardScreen(role: String, onLogout: () -> Unit, onNavigateToSales: () ->
                 }
                 DashboardTab.Penjualan -> {
                     PenjualanTabContent(
-                        role = role,
+                        role = role.displayName,
                         transaksiList = transaksiList,
                         menuList = menuList,
                         snackbarHostState = snackbarHostState,
@@ -183,7 +196,7 @@ fun DashboardScreen(role: String, onLogout: () -> Unit, onNavigateToSales: () ->
                 }
                 DashboardTab.Biaya -> {
                     BiayaTabContent(
-                        role = role,
+                        role = role.displayName,
                         biayaList = biayaList,
                         snackbarHostState = snackbarHostState
                     )
@@ -191,7 +204,7 @@ fun DashboardScreen(role: String, onLogout: () -> Unit, onNavigateToSales: () ->
                 DashboardTab.Profil -> {
                     ProfilTabContent(
                         userName = userName,
-                        userRole = role,
+                        userRole = role.displayName,
                         userEmail = userEmail,
                         onLogoutClick = onLogout,
                         onNameChange = { userName = it }
