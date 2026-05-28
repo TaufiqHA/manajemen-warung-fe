@@ -16,15 +16,13 @@ class ReportViewModel : ViewModel() {
     val selectedItemId = _selectedItemId.asStateFlow()
 
     // Data semua barang untuk dropdown
-    val allItems = StateFlow<List<Item>>(
-        MutableStateFlow(listOf(
-            Item("1", "Indomie Goreng", 3000),
-            Item("2", "Kopi Kapal Api", 1500),
-            Item("3", "Beras 5kg", 65000),
-            Item("4", "Gula Pasir 1kg", 16000),
-            Item("5", "Telur Ayam 1kg", 28000)
-        )).asStateFlow()
-    )
+    val allItems = MutableStateFlow(listOf(
+        Item("1", "Indomie Goreng", 3000),
+        Item("2", "Kopi Kapal Api", 1500),
+        Item("3", "Beras 5kg", 65000),
+        Item("4", "Gula Pasir 1kg", 16000),
+        Item("5", "Telur Ayam 1kg", 28000)
+    )).asStateFlow()
 
     // Data semua transaksi (Mockup)
     private val _allTransactions = MutableStateFlow<List<Transaction>>(generateMockTransactions())

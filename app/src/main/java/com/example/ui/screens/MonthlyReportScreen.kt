@@ -4,7 +4,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.Inventory
 import androidx.compose.material3.*
@@ -41,7 +41,7 @@ fun MonthlyReportScreen(
                 title = { Text("Laporan Bulanan per Item") },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.Default.ArrowBack, contentDescription = "Kembali")
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Kembali")
                     }
                 }
             )
@@ -74,7 +74,7 @@ fun MonthlyReportScreen(
                             label = { Text("Pilih Bulan") },
                             trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = monthExpanded) },
                             leadingIcon = { Icon(Icons.Default.CalendarMonth, contentDescription = null) },
-                            modifier = Modifier.menuAnchor().fillMaxWidth()
+                            modifier = Modifier.menuAnchor(MenuAnchorType.PrimaryNotEditable).fillMaxWidth()
                         )
                         ExposedDropdownMenu(
                             expanded = monthExpanded,
@@ -107,7 +107,7 @@ fun MonthlyReportScreen(
                             label = { Text("Pilih Item") },
                             trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = itemExpanded) },
                             leadingIcon = { Icon(Icons.Default.Inventory, contentDescription = null) },
-                            modifier = Modifier.menuAnchor().fillMaxWidth()
+                            modifier = Modifier.menuAnchor(MenuAnchorType.PrimaryNotEditable).fillMaxWidth()
                         )
                         ExposedDropdownMenu(
                             expanded = itemExpanded,

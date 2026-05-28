@@ -44,7 +44,7 @@ import java.util.Locale
 enum class DashboardTab(val label: String) {
     Beranda("Beranda"),
     Penjualan("Penjualan"),
-    ManajemenBarang("Manajemen Barang"),
+    ManajemenBarang("Barang"),
     LabaRugi("Laba Rugi"),
     Biaya("Biaya"),
     Profil("Profile")
@@ -73,19 +73,13 @@ val allMenus = listOf(
         allowedRoles = listOf(UserRole.OWNER)
     ),
     DashboardMenu(
-        title = "Profile",
-        icon = Icons.Filled.Person,
-        tab = DashboardTab.Profil,
-        allowedRoles = listOf(UserRole.OWNER)
-    ),
-    DashboardMenu(
         title = "Penjualan",
         icon = Icons.Filled.ShoppingCart,
         tab = DashboardTab.Penjualan,
         allowedRoles = listOf(UserRole.ADMIN_TOKO)
     ),
     DashboardMenu(
-        title = "Manajemen Barang",
+        title = "Barang",
         icon = Icons.Filled.Inventory,
         tab = DashboardTab.ManajemenBarang,
         allowedRoles = listOf(UserRole.ADMIN_TOKO)
@@ -95,6 +89,12 @@ val allMenus = listOf(
         icon = Icons.Filled.Payments,
         tab = DashboardTab.Biaya,
         allowedRoles = listOf(UserRole.ADMIN_KANTOR)
+    ),
+    DashboardMenu(
+        title = "Profile",
+        icon = Icons.Filled.Person,
+        tab = DashboardTab.Profil,
+        allowedRoles = listOf(UserRole.OWNER, UserRole.ADMIN_TOKO, UserRole.ADMIN_KANTOR)
     )
 )
 
@@ -259,7 +259,7 @@ fun DashboardScreen(
                         onNavigateTab = { activeTab = it },
                         snackbarHostState = snackbarHostState,
                         biayaList = biayaList,
-                        onLogoutClick = if (role != UserRole.OWNER) onLogout else null
+                        onLogoutClick = if (role == UserRole.OWNER) onLogout else null
                     )
                 }
                 DashboardTab.Penjualan -> {
@@ -273,6 +273,7 @@ fun DashboardScreen(
                 }
                 DashboardTab.ManajemenBarang -> {
                     BarangTabContent(
+                        role = role.displayName,
                         menuList = menuList,
                         snackbarHostState = snackbarHostState
                     )
@@ -418,33 +419,6 @@ fun BerandaTabContent(
                     text = "${transaksiList.size} Transaksi Berhasil",
                     style = MaterialTheme.typography.labelMedium,
                     color = SuccessColor
-                )
-            }
-        }
-
-        Spacer(modifier = Modifier.height(24.dp))
-        Text(
-            text = "MENU AKSES",
-            style = MaterialTheme.typography.titleSmall,
-            fontWeight = FontWeight.Bold
-        )
-        Spacer(modifier = Modifier.height(12.dp))
-
-        // Menu Grid for Quick Access
-        val quickMenus = visibleMenus.filter { it.tab != DashboardTab.Beranda }
-        androidx.compose.foundation.lazy.grid.LazyVerticalGrid(
-            columns = androidx.compose.foundation.lazy.grid.GridCells.Fixed(2),
-            modifier = Modifier.height(if (quickMenus.size > 2) 220.dp else 110.dp),
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
-            userScrollEnabled = false // Fixed height and no internal scroll
-        ) {
-            items(quickMenus.size) { index ->
-                val menu = quickMenus[index]
-                MenuCard(
-                    title = menu.title,
-                    icon = menu.icon,
-                    onClick = { onNavigateTab(menu.tab) }
                 )
             }
         }
@@ -720,12 +694,14 @@ fun PenjualanTabContent(
                         ) {
                             Text("Tambah Transaksi Penjualan")
                         }
-                        Button(
-                            onClick = { showActionChooser = false; showAddMenuForm = true },
-                            modifier = Modifier.fillMaxWidth(),
-                            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.secondary)
-                        ) {
-                            Text("Tambah Menu Baru")
+                        if (role != UserRole.ADMIN_TOKO.displayName) {
+                            Button(
+                                onClick = { showActionChooser = false; showAddMenuForm = true },
+                                modifier = Modifier.fillMaxWidth(),
+                                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.secondary)
+                            ) {
+                                Text("Tambah Menu Baru")
+                            }
                         }
                     }
                 },
@@ -1476,13 +1452,15 @@ fun BiayaTabContent(
                     }
                 },
                 dismissButton = {
-                    TextButton(
-                        onClick = {
-                            selectedItemForDetail = null
-                            itemToDelete = item
+                    if (role == UserRole.OWNER.displayName) {
+                        TextButton(
+                            onClick = {
+                                selectedItemForDetail = null
+                                itemToDelete = item
+                            }
+                        ) {
+                            Text("Hapus", color = DangerColor)
                         }
-                    ) {
-                        Text("Hapus", color = DangerColor)
                     }
                 }
             )
@@ -1925,6 +1903,7 @@ fun LabaRugiTabContent(
 // ------------------------- 6. MANAJEMEN BARANG TAB -------------------------
 @Composable
 fun BarangTabContent(
+    role: String,
     menuList: MutableList<MenuItem>,
     snackbarHostState: SnackbarHostState,
     modifier: Modifier = Modifier
@@ -1940,7 +1919,7 @@ fun BarangTabContent(
         ) {
             Spacer(modifier = Modifier.height(28.dp))
             Text(
-                text = "Manajemen Barang",
+                text = "Barang",
                 style = MaterialTheme.typography.titleLarge,
                 fontWeight = FontWeight.Bold
             )
@@ -1970,13 +1949,15 @@ fun BarangTabContent(
                                     Text(item.nama, fontWeight = FontWeight.Bold)
                                     Text(formatRupiah(item.harga), style = MaterialTheme.typography.bodySmall, color = Color.Gray)
                                 }
-                                IconButton(onClick = { 
-                                    menuList.remove(item)
-                                    coroutineScope.launch {
-                                        snackbarHostState.showSnackbar("Barang berhasil dihapus")
+                                if (role == UserRole.ADMIN_TOKO.displayName || role == UserRole.OWNER.displayName) {
+                                    IconButton(onClick = { 
+                                        menuList.remove(item)
+                                        coroutineScope.launch {
+                                            snackbarHostState.showSnackbar("Barang berhasil dihapus")
+                                        }
+                                    }) {
+                                        Icon(Icons.Filled.Delete, contentDescription = "Hapus", tint = DangerColor)
                                     }
-                                }) {
-                                    Icon(Icons.Filled.Delete, contentDescription = "Hapus", tint = DangerColor)
                                 }
                             }
                         }
@@ -1985,14 +1966,16 @@ fun BarangTabContent(
             }
         }
 
-        FloatingActionButton(
-            onClick = { showAddMenuForm = true },
-            modifier = Modifier
-                .align(Alignment.BottomEnd)
-                .padding(24.dp),
-            containerColor = MaterialTheme.colorScheme.primary
-        ) {
-            Icon(Icons.Filled.Add, contentDescription = "Tambah Barang", tint = Color.White)
+        if (role == UserRole.ADMIN_TOKO.displayName || role == UserRole.OWNER.displayName) {
+            FloatingActionButton(
+                onClick = { showAddMenuForm = true },
+                modifier = Modifier
+                    .align(Alignment.BottomEnd)
+                    .padding(24.dp),
+                containerColor = MaterialTheme.colorScheme.primary
+            ) {
+                Icon(Icons.Filled.Add, contentDescription = "Tambah Barang", tint = Color.White)
+            }
         }
 
         if (showAddMenuForm) {
