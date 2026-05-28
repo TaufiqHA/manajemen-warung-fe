@@ -7,6 +7,7 @@ data class Item(
 )
 
 data class TransactionItem(
+    val itemId: String,
     val namaBarang: String,
     val qty: Int,
     val harga: Long,

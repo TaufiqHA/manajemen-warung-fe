@@ -10,6 +10,8 @@ import com.example.ui.screens.DashboardScreen
 import com.example.ui.screens.SalesScreen
 import com.example.data.UserRole
 
+import com.example.ui.screens.MonthlyReportScreen
+
 @Composable
 fun AppNavigation() {
     val navController = rememberNavController()
@@ -45,11 +47,21 @@ fun AppNavigation() {
                 },
                 onNavigateToSales = {
                     navController.navigate("sales")
+                },
+                onNavigateToMonthlyReport = {
+                    navController.navigate("monthly_report")
                 }
             )
         }
         composable("sales") {
             SalesScreen(
+                onBack = {
+                    navController.popBackStack()
+                }
+            )
+        }
+        composable("monthly_report") {
+            MonthlyReportScreen(
                 onBack = {
                     navController.popBackStack()
                 }

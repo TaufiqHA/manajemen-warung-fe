@@ -164,7 +164,12 @@ fun MenuCard(
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun DashboardScreen(role: UserRole, onLogout: () -> Unit, onNavigateToSales: () -> Unit) {
+fun DashboardScreen(
+    role: UserRole, 
+    onLogout: () -> Unit, 
+    onNavigateToSales: () -> Unit,
+    onNavigateToMonthlyReport: () -> Unit
+) {
     var activeTab by remember { mutableStateOf(DashboardTab.Beranda) }
     
     // Live State Lists for local mockup persistence
@@ -275,7 +280,8 @@ fun DashboardScreen(role: UserRole, onLogout: () -> Unit, onNavigateToSales: () 
                 DashboardTab.LabaRugi -> {
                     LabaRugiTabContent(
                         transaksiList = transaksiList,
-                        biayaList = biayaList
+                        biayaList = biayaList,
+                        onNavigateToMonthlyReport = onNavigateToMonthlyReport
                     )
                 }
                 DashboardTab.Biaya -> {
@@ -1768,6 +1774,7 @@ fun ProfilTabContent(
 fun LabaRugiTabContent(
     transaksiList: List<TransaksiHarian>,
     biayaList: List<BiayaOperasional>,
+    onNavigateToMonthlyReport: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     var selectedLabaDateFilter by remember { mutableStateOf("Bulan Ini") }
@@ -1793,21 +1800,59 @@ fun LabaRugiTabContent(
     ) {
         Spacer(modifier = Modifier.height(28.dp))
         Text(
-            text = "Inventori Laba-Rugi",
+            text = "Laporan Keuangan",
             style = MaterialTheme.typography.titleLarge,
             fontWeight = FontWeight.Bold
         )
         Text(
-            text = "Laporan Performa Keuangan",
+            text = "Analisis Performa Warung",
             style = MaterialTheme.typography.bodyMedium,
             color = Color.Gray
         )
         Spacer(modifier = Modifier.height(16.dp))
 
-        // Date selection chips
+        // --- Fitur Baru: Laporan Bulanan per Item ---
+        Card(
+            modifier = Modifier.fillMaxWidth().padding(bottom = 24.dp),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer),
+            shape = RoundedCornerShape(12.dp)
+        ) {
+            Column(modifier = Modifier.padding(16.dp)) {
+                Text(
+                    text = "Laporan Bulanan per Item",
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onPrimaryContainer
+                )
+                Text(
+                    text = "Lihat rincian penjualan harian untuk setiap barang.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f)
+                )
+                Spacer(modifier = Modifier.height(12.dp))
+                Button(
+                    onClick = onNavigateToMonthlyReport,
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
+                ) {
+                    Icon(Icons.Default.CalendarMonth, contentDescription = null)
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("Buka Laporan Item")
+                }
+            }
+        }
+
+        Text(
+            text = "Ringkasan Laba-Rugi",
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.Bold,
+            modifier = Modifier.padding(bottom = 12.dp)
+        )
+
+        // Date selection chips for Laba-Rugi
         LazyRow(
             horizontalArrangement = Arrangement.spacedBy(8.dp),
-            modifier = Modifier.fillMaxWidth()
+            modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp)
         ) {
             items(labaDateFilters) { dateFilter ->
                 val isSelected = selectedLabaDateFilter == dateFilter
@@ -1823,89 +1868,7 @@ fun LabaRugiTabContent(
             }
         }
 
-        Spacer(modifier = Modifier.height(24.dp))
-        Text(
-            text = "Rekap",
-            style = MaterialTheme.typography.titleMedium,
-            fontWeight = FontWeight.Bold,
-            modifier = Modifier.padding(bottom = 12.dp)
-        )
-
-        // A. Laporan Global Penjualan
-        Card(
-            modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp),
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-            shape = RoundedCornerShape(12.dp)
-        ) {
-            Column(modifier = Modifier.padding(16.dp)) {
-                Text(
-                    text = "A. Laporan Global Penjualan ($selectedLabaDateFilter)",
-                    style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.Bold
-                )
-                Spacer(modifier = Modifier.height(8.dp))
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(text = "Total Penjualan:", style = MaterialTheme.typography.bodyMedium)
-                    Text(
-                        text = formatRupiah(totalPemasukan),
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = SuccessColor
-                    )
-                }
-            }
-        }
-
-        // B. Laporan per item penjualan
-        Card(
-            modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp),
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-            shape = RoundedCornerShape(12.dp)
-        ) {
-            Column(modifier = Modifier.padding(16.dp)) {
-                Text(
-                    text = "B. Laporan per item penjualan ($selectedLabaDateFilter)",
-                    style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.Bold
-                )
-                Spacer(modifier = Modifier.height(12.dp))
-                
-                if (transaksiList.isEmpty()) {
-                    Text(
-                        text = "Tidak ada data penjualan.",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = Color.Gray
-                    )
-                } else {
-                    // Group by item name
-                    val groupedItems = transaksiList.groupBy { it.namaItem }
-                    groupedItems.forEach { (itemName, items) ->
-                        val itemQuantity = items.sumOf { it.jumlah } * multiplier
-                        val itemTotal = items.sumOf { it.jumlah * it.harga } * multiplier
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(vertical = 4.dp),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Text(text = "$itemName (${itemQuantity.toInt()}x)", style = MaterialTheme.typography.bodyMedium)
-                            Text(
-                                text = formatRupiah(itemTotal),
-                                style = MaterialTheme.typography.bodyMedium,
-                                fontWeight = FontWeight.Bold
-                            )
-                        }
-                    }
-                }
-            }
-        }
-
-        // C. Laporan Laba-Rugi
+        // C. Laporan Laba-Rugi (Keeping this as summary)
         Card(
             modifier = Modifier.fillMaxWidth().padding(bottom = 24.dp),
             colors = CardDefaults.cardColors(
@@ -1915,7 +1878,7 @@ fun LabaRugiTabContent(
         ) {
             Column(modifier = Modifier.padding(16.dp)) {
                 Text(
-                    text = "C. Laporan Laba-Rugi",
+                    text = "Rekap Performa ($selectedLabaDateFilter)",
                     style = MaterialTheme.typography.titleSmall,
                     fontWeight = FontWeight.Bold
                 )
@@ -1931,14 +1894,14 @@ fun LabaRugiTabContent(
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
                     Text(text = "Total Penjualan", style = MaterialTheme.typography.bodyMedium)
-                    Text(text = formatRupiah(totalPemasukan), style = MaterialTheme.typography.bodyMedium, color = SuccessColor)
+                    Text(text = formatRupiah(totalPemasukan.toLong()), style = MaterialTheme.typography.bodyMedium, color = SuccessColor)
                 }
                 Row(
                     modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
                     Text(text = "Total Pengeluaran", style = MaterialTheme.typography.bodyMedium)
-                    Text(text = "- ${formatRupiah(totalBiaya)}", style = MaterialTheme.typography.bodyMedium, color = DangerColor)
+                    Text(text = "- ${formatRupiah(totalBiaya.toLong())}", style = MaterialTheme.typography.bodyMedium, color = DangerColor)
                 }
                 Divider(modifier = Modifier.padding(vertical = 8.dp))
                 Row(
@@ -1948,7 +1911,7 @@ fun LabaRugiTabContent(
                 ) {
                     Text(text = "Laba Bersih:", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                     Text(
-                        text = formatRupiah(labaBersih),
+                        text = formatRupiah(labaBersih.toLong()),
                         style = MaterialTheme.typography.titleLarge,
                         fontWeight = FontWeight.ExtraBold,
                         color = if (labaBersih >= 0) SuccessColor else DangerColor

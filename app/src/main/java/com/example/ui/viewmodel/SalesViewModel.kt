@@ -66,7 +66,10 @@ class SalesViewModel : ViewModel() {
         get() = _cartItems.sumOf { it.subTotal }
 
     fun addToCart(nama: String, qty: Int, harga: Long) {
-        val existingItemIndex = _cartItems.indexOfFirst { it.namaBarang == nama && it.harga == harga }
+        val item = _allItems.value.find { it.name == nama && it.price == harga }
+        val itemId = item?.id ?: "TEMP-${nama.hashCode()}"
+
+        val existingItemIndex = _cartItems.indexOfFirst { it.itemId == itemId && it.harga == harga }
         if (existingItemIndex != -1) {
             val existingItem = _cartItems[existingItemIndex]
             val updatedItem = existingItem.copy(
@@ -75,7 +78,7 @@ class SalesViewModel : ViewModel() {
             )
             _cartItems[existingItemIndex] = updatedItem
         } else {
-            _cartItems.add(TransactionItem(nama, qty, harga))
+            _cartItems.add(TransactionItem(itemId, nama, qty, harga))
         }
     }
 
