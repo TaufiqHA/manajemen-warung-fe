@@ -3,16 +3,13 @@ package com.example.ui.screens
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.CalendarMonth
-import androidx.compose.material.icons.filled.Inventory
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.example.ui.components.AppIcons
 import com.example.data.DailyItemReport
 import com.example.data.Item
 import com.example.ui.viewmodel.ReportViewModel
@@ -41,7 +38,7 @@ fun MonthlyReportScreen(
                 title = { Text("Laporan Bulanan per Item") },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Kembali")
+                        Icon(AppIcons.ArrowBack, contentDescription = "Kembali")
                     }
                 }
             )
@@ -73,7 +70,7 @@ fun MonthlyReportScreen(
                             readOnly = true,
                             label = { Text("Pilih Bulan") },
                             trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = monthExpanded) },
-                            leadingIcon = { Icon(Icons.Default.CalendarMonth, contentDescription = null) },
+                            leadingIcon = { Icon(AppIcons.Calendar, contentDescription = null) },
                             modifier = Modifier.menuAnchor(MenuAnchorType.PrimaryNotEditable).fillMaxWidth()
                         )
                         ExposedDropdownMenu(
@@ -106,7 +103,7 @@ fun MonthlyReportScreen(
                             readOnly = true,
                             label = { Text("Pilih Item") },
                             trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = itemExpanded) },
-                            leadingIcon = { Icon(Icons.Default.Inventory, contentDescription = null) },
+                            leadingIcon = { Icon(AppIcons.Product, contentDescription = null) },
                             modifier = Modifier.menuAnchor(MenuAnchorType.PrimaryNotEditable).fillMaxWidth()
                         )
                         ExposedDropdownMenu(

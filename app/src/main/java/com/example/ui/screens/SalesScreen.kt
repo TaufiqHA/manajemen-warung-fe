@@ -7,8 +7,6 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -24,6 +22,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.data.InvoiceItem
 import com.example.data.Transaction
 import com.example.data.TransactionModel
+import com.example.ui.components.AppIcons
 import com.example.ui.theme.DangerColor
 import com.example.ui.theme.SuccessColor
 import com.example.ui.viewmodel.SalesViewModel
@@ -57,7 +56,7 @@ fun SalesScreen(
                 title = { Text("Transaksi Penjualan") },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.Default.ArrowBack, contentDescription = "Kembali")
+                        Icon(AppIcons.ArrowBack, contentDescription = "Kembali")
                     }
                 }
             )
@@ -125,7 +124,7 @@ fun SalesScreen(
                         },
                         modifier = Modifier.fillMaxWidth()
                     ) {
-                        Icon(Icons.Default.Add, contentDescription = null)
+                        Icon(AppIcons.Add, contentDescription = null)
                         Spacer(modifier = Modifier.width(8.dp))
                         Text("Tambah ke Keranjang")
                     }
@@ -158,7 +157,7 @@ fun SalesScreen(
                             Text(formatRupiah(item.subTotal), fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
                             Spacer(modifier = Modifier.width(8.dp))
                             IconButton(onClick = { viewModel.removeFromCart(item) }) {
-                                Icon(Icons.Default.Delete, contentDescription = "Hapus", tint = DangerColor)
+                                Icon(AppIcons.Delete, contentDescription = "Hapus", tint = DangerColor)
                             }
                         }
                     }
@@ -202,7 +201,7 @@ fun SalesScreen(
                 enabled = viewModel.cartItems.isNotEmpty(),
                 shape = RoundedCornerShape(12.dp)
             ) {
-                Icon(Icons.Default.Print, contentDescription = null)
+                Icon(AppIcons.Print, contentDescription = null)
                 Spacer(modifier = Modifier.width(8.dp))
                 Text("Proses & Cetak Struk", fontSize = 18.sp)
             }
@@ -254,7 +253,7 @@ fun SalesScreen(
                         generateQuotationPdf(context, quotationData)
                     }
                 }) {
-                    Icon(Icons.Default.PictureAsPdf, contentDescription = null)
+                    Icon(AppIcons.Pdf, contentDescription = null)
                     Spacer(modifier = Modifier.width(8.dp))
                     Text("Export PDF")
                 }

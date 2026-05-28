@@ -1,6 +1,5 @@
 package com.example.ui.screens
 
-import android.content.Intent
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.net.Uri
@@ -10,10 +9,6 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowBack
-import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.Upload
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -25,6 +20,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import coil.compose.rememberAsyncImagePainter
+import com.example.ui.components.AppIcons
 import com.example.ui.theme.DangerColor
 import com.example.utils.LogoManager
 import com.yalantis.ucrop.UCrop
@@ -80,7 +76,7 @@ fun SettingsScreen(
                 title = { Text("Pengaturan Logo") },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.Default.ArrowBack, contentDescription = "Kembali")
+                        Icon(AppIcons.ArrowBack, contentDescription = "Kembali")
                     }
                 }
             )
@@ -130,7 +126,7 @@ fun SettingsScreen(
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(8.dp)
                 ) {
-                    Icon(Icons.Default.Upload, contentDescription = null)
+                    Icon(AppIcons.Upload, contentDescription = null)
                     Spacer(modifier = Modifier.width(8.dp))
                     Text("Upload/Ganti Logo")
                 }
@@ -145,7 +141,7 @@ fun SettingsScreen(
                         colors = ButtonDefaults.buttonColors(containerColor = DangerColor),
                         shape = RoundedCornerShape(8.dp)
                     ) {
-                        Icon(Icons.Default.Delete, contentDescription = null)
+                        Icon(AppIcons.Delete, contentDescription = null)
                         Spacer(modifier = Modifier.width(8.dp))
                         Text("Hapus Logo")
                     }

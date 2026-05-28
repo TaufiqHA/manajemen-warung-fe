@@ -8,6 +8,7 @@ import com.example.ui.screens.LoginScreen
 import com.example.ui.screens.SplashScreen
 import com.example.ui.screens.DashboardScreen
 import com.example.ui.screens.SalesScreen
+import com.example.ui.screens.SettingsScreen
 import com.example.data.UserRole
 
 import com.example.ui.screens.MonthlyReportScreen

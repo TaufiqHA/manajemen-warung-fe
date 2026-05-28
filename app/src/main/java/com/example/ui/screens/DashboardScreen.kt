@@ -1,6 +1,5 @@
 package com.example.ui.screens
 
-import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -13,16 +12,10 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.*
-import androidx.compose.material.icons.outlined.Lock
-import androidx.compose.material.icons.outlined.Storefront
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.alpha
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
@@ -30,15 +23,13 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.launch
+import com.example.ui.components.AppIcons
 import com.example.ui.components.ConfirmDialog
 import com.example.ui.theme.DangerColor
 import com.example.ui.theme.SuccessColor
 import com.example.ui.theme.InfoColor
-import com.example.ui.theme.PrimaryColor
 import com.example.utils.formatRupiah
 import com.example.data.UserRole
-import java.text.NumberFormat
-import java.util.Locale
 
 // Enumeration for Bottom Navigation Tabs
 enum class DashboardTab(val label: String) {
@@ -62,37 +53,37 @@ data class DashboardMenu(
 val allMenus = listOf(
     DashboardMenu(
         title = "Beranda",
-        icon = Icons.Filled.Home,
+        icon = AppIcons.Dashboard,
         tab = DashboardTab.Beranda,
         allowedRoles = listOf(UserRole.OWNER, UserRole.ADMIN_TOKO, UserRole.ADMIN_KANTOR)
     ),
     DashboardMenu(
         title = "Laba Rugi",
-        icon = Icons.Filled.TrendingUp,
+        icon = AppIcons.TrendingUp,
         tab = DashboardTab.LabaRugi,
         allowedRoles = listOf(UserRole.OWNER)
     ),
     DashboardMenu(
         title = "Penjualan",
-        icon = Icons.Filled.ShoppingCart,
+        icon = AppIcons.Transaction,
         tab = DashboardTab.Penjualan,
         allowedRoles = listOf(UserRole.ADMIN_TOKO)
     ),
     DashboardMenu(
         title = "Barang",
-        icon = Icons.Filled.Inventory,
+        icon = AppIcons.Product,
         tab = DashboardTab.ManajemenBarang,
         allowedRoles = listOf(UserRole.ADMIN_TOKO)
     ),
     DashboardMenu(
         title = "Biaya Operasional",
-        icon = Icons.Filled.Payments,
+        icon = AppIcons.Payments,
         tab = DashboardTab.Biaya,
         allowedRoles = listOf(UserRole.ADMIN_KANTOR)
     ),
     DashboardMenu(
         title = "Profile",
-        icon = Icons.Filled.Person,
+        icon = AppIcons.Profile,
         tab = DashboardTab.Profil,
         allowedRoles = listOf(UserRole.OWNER, UserRole.ADMIN_TOKO, UserRole.ADMIN_KANTOR)
     )
@@ -296,10 +287,11 @@ fun DashboardScreen(
                 DashboardTab.Profil -> {
                     ProfilTabContent(
                         userName = userName,
-                        userRole = role.displayName,
+                        userRole = role,
                         userEmail = userEmail,
                         onLogoutClick = onLogout,
-                        onNameChange = { userName = it }
+                        onNameChange = { userName = it },
+                        onNavigateToSettings = onNavigateToSettings
                     )
                 }
             }
@@ -363,7 +355,7 @@ fun BerandaTabContent(
                 if (onLogoutClick != null) {
                     IconButton(onClick = onLogoutClick) {
                         Icon(
-                            imageVector = Icons.Filled.ExitToApp,
+                            imageVector = AppIcons.Logout,
                             contentDescription = "Logout",
                             tint = DangerColor
                         )
@@ -371,7 +363,7 @@ fun BerandaTabContent(
                     Spacer(modifier = Modifier.width(8.dp))
                 }
                 Icon(
-                    imageVector = Icons.Filled.Storefront,
+                    imageVector = AppIcons.Store,
                     contentDescription = "Store icon",
                     tint = MaterialTheme.colorScheme.primary,
                     modifier = Modifier.size(36.dp)
@@ -571,7 +563,7 @@ fun PenjualanTabContent(
             if (transaksiList.isEmpty()) {
                 Box(modifier = Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Icon(Icons.Filled.Storefront, contentDescription = null, modifier = Modifier.size(64.dp), tint = Color.LightGray)
+                        Icon(AppIcons.Store, contentDescription = null, modifier = Modifier.size(64.dp), tint = Color.LightGray)
                         Spacer(modifier = Modifier.height(12.dp))
                         Text("Belum ada transaksi hari ini", style = MaterialTheme.typography.bodyMedium, color = Color.Gray)
                     }
@@ -606,7 +598,7 @@ fun PenjualanTabContent(
                                         .padding(horizontal = 20.dp),
                                     contentAlignment = Alignment.CenterEnd
                                 ) {
-                                    Icon(Icons.Filled.Delete, contentDescription = "Hapus", tint = Color.White)
+                                    Icon(AppIcons.Delete, contentDescription = "Hapus", tint = Color.White)
                                 }
                             },
                             content = {
@@ -674,7 +666,7 @@ fun PenjualanTabContent(
                 .padding(24.dp),
             containerColor = MaterialTheme.colorScheme.primary
         ) {
-            Icon(Icons.Filled.Add, contentDescription = "Tambah", tint = Color.White)
+            Icon(AppIcons.Add, contentDescription = "Tambah", tint = Color.White)
         }
 
         if (showActionChooser) {
@@ -875,7 +867,7 @@ fun PenjualanTabContent(
                                     val current = qty.toIntOrNull() ?: 1
                                     if (current > 1) qty = (current - 1).toString()
                                 }) {
-                                    Icon(imageVector = Icons.Filled.Remove, contentDescription = "Kurang")
+                                    Icon(imageVector = AppIcons.Remove, contentDescription = "Kurang")
                                 }
                                 Text(
                                     text = qty,
@@ -886,7 +878,7 @@ fun PenjualanTabContent(
                                     val current = qty.toIntOrNull() ?: 1
                                     qty = (current + 1).toString()
                                 }) {
-                                    Icon(imageVector = Icons.Filled.Add, contentDescription = "Tambah")
+                                    Icon(imageVector = AppIcons.Add, contentDescription = "Tambah")
                                 }
                             }
                         }
@@ -1262,7 +1254,7 @@ fun BiayaTabContent(
                 .padding(24.dp),
             containerColor = MaterialTheme.colorScheme.primary
         ) {
-            Icon(Icons.Filled.Add, contentDescription = "Tambah Biaya", tint = Color.White)
+            Icon(AppIcons.Add, contentDescription = "Tambah Biaya", tint = Color.White)
         }
 
         // ---------- ADD BIAYA MODAL ----------
@@ -1292,7 +1284,7 @@ fun BiayaTabContent(
                                 onValueChange = {},
                                 readOnly = true,
                                 modifier = Modifier.fillMaxWidth().clickable { expandedDropdown = true },
-                                trailingIcon = { Icon(Icons.Filled.ArrowDropDown, contentDescription = null) }
+                                trailingIcon = { Icon(AppIcons.ArrowDropDown, contentDescription = null) }
                             )
                             DropdownMenu(
                                 expanded = expandedDropdown,
@@ -1473,10 +1465,11 @@ fun BiayaTabContent(
 @Composable
 fun ProfilTabContent(
     userName: String,
-    userRole: String,
+    userRole: UserRole,
     userEmail: String,
     onLogoutClick: () -> Unit,
     onNameChange: (String) -> Unit,
+    onNavigateToSettings: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     var showLogoutConfirm by remember { mutableStateOf(false) }
@@ -1531,7 +1524,7 @@ fun ProfilTabContent(
             shape = RoundedCornerShape(12.dp)
         ) {
             Text(
-                text = userRole,
+                text = userRole.displayName,
                 style = MaterialTheme.typography.labelMedium.copy(
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.primary
@@ -1560,8 +1553,24 @@ fun ProfilTabContent(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text("👤 Ubah Nama", style = MaterialTheme.typography.bodyMedium)
-                    Icon(Icons.Filled.ChevronRight, contentDescription = null, tint = Color.Gray)
+                    Icon(AppIcons.ChevronRight, contentDescription = null, tint = Color.Gray)
                 }
+
+                if (userRole == UserRole.OWNER) {
+                    Divider(modifier = Modifier.padding(horizontal = 12.dp))
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { onNavigateToSettings() }
+                            .padding(14.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text("🖼️ Pengaturan Logo", style = MaterialTheme.typography.bodyMedium)
+                        Icon(AppIcons.ChevronRight, contentDescription = null, tint = Color.Gray)
+                    }
+                }
+
                 Divider(modifier = Modifier.padding(horizontal = 12.dp))
                 Row(
                     modifier = Modifier
@@ -1572,7 +1581,7 @@ fun ProfilTabContent(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text("🔒 Ubah Password", style = MaterialTheme.typography.bodyMedium)
-                    Icon(Icons.Filled.ChevronRight, contentDescription = null, tint = Color.Gray)
+                    Icon(AppIcons.ChevronRight, contentDescription = null, tint = Color.Gray)
                 }
                 Divider(modifier = Modifier.padding(horizontal = 12.dp))
                 Row(
@@ -1597,7 +1606,7 @@ fun ProfilTabContent(
             colors = ButtonDefaults.buttonColors(containerColor = DangerColor),
             shape = RoundedCornerShape(8.dp)
         ) {
-            Icon(Icons.Filled.ExitToApp, contentDescription = null, tint = Color.White)
+            Icon(AppIcons.Logout, contentDescription = null, tint = Color.White)
             Spacer(modifier = Modifier.width(8.dp))
             Text("KELUAR", style = MaterialTheme.typography.labelLarge, color = Color.White)
         }
@@ -1814,7 +1823,7 @@ fun LabaRugiTabContent(
                     modifier = Modifier.fillMaxWidth(),
                     colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
                 ) {
-                    Icon(Icons.Default.CalendarMonth, contentDescription = null)
+                    Icon(AppIcons.Calendar, contentDescription = null)
                     Spacer(modifier = Modifier.width(8.dp))
                     Text("Buka Laporan Item")
                 }
@@ -1957,7 +1966,7 @@ fun BarangTabContent(
                                             snackbarHostState.showSnackbar("Barang berhasil dihapus")
                                         }
                                     }) {
-                                        Icon(Icons.Filled.Delete, contentDescription = "Hapus", tint = DangerColor)
+                                        Icon(AppIcons.Delete, contentDescription = "Hapus", tint = DangerColor)
                                     }
                                 }
                             }
@@ -1975,7 +1984,7 @@ fun BarangTabContent(
                     .padding(24.dp),
                 containerColor = MaterialTheme.colorScheme.primary
             ) {
-                Icon(Icons.Filled.Add, contentDescription = "Tambah Barang", tint = Color.White)
+                Icon(AppIcons.Add, contentDescription = "Tambah Barang", tint = Color.White)
             }
         }
 
@@ -2008,29 +2017,6 @@ fun BarangTabContent(
                         val h = hargaMenu.toDoubleOrNull() ?: 0.0
                         if (namaMenu.isNotBlank() && h > 0) {
                             menuList.add(MenuItem(java.util.UUID.randomUUID().toString(), namaMenu, h))
-                            showAddMenuForm = false
-                            coroutineScope.launch {
-                                snackbarHostState.showSnackbar("Barang berhasil ditambahkan")
-                            }
-                        }
-                    }) {
-                        Text("Simpan")
-                    }
-                },
-                dismissButton = {
-                    TextButton(onClick = { showAddMenuForm = false }) {
-                        Text("Batal")
-                    }
-                }
-            )
-        }
-    }
-}
-           )
-        }
-    }
-}
-andomUUID().toString(), namaMenu, h))
                             showAddMenuForm = false
                             coroutineScope.launch {
                                 snackbarHostState.showSnackbar("Barang berhasil ditambahkan")

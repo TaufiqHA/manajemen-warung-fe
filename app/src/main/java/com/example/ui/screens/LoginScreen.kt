@@ -17,10 +17,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Storefront
-import androidx.compose.material.icons.filled.Visibility
-import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -49,6 +45,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
+import com.example.ui.components.AppIcons
 import com.example.ui.components.PrimaryButton
 import com.example.data.UserRole
 import kotlinx.coroutines.delay
@@ -149,7 +146,7 @@ fun LoginScreen(onLoginSuccess: (UserRole) -> Unit) {
                             contentAlignment = Alignment.Center
                         ) {
                             Icon(
-                                imageVector = Icons.Filled.Storefront,
+                                imageVector = AppIcons.Store,
                                 contentDescription = "App Logo",
                                 tint = MaterialTheme.colorScheme.primary,
                                 modifier = Modifier.size(48.dp)
@@ -209,7 +206,7 @@ fun LoginScreen(onLoginSuccess: (UserRole) -> Unit) {
                             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
                             visualTransformation = if (showPassword) VisualTransformation.None else PasswordVisualTransformation(),
                             trailingIcon = {
-                                val image = if (showPassword) Icons.Filled.Visibility else Icons.Filled.VisibilityOff
+                                val image = if (showPassword) AppIcons.Visibility else AppIcons.VisibilityOff
                                 IconButton(onClick = { showPassword = !showPassword }) {
                                     Icon(
                                         imageVector = image,
