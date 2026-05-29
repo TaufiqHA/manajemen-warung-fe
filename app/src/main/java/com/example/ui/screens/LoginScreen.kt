@@ -48,18 +48,26 @@ import androidx.compose.ui.unit.dp
 import com.example.ui.components.AppIcons
 import com.example.ui.components.PrimaryButton
 import com.example.data.UserRole
+import com.example.ui.viewmodel.AuthViewModel
+import com.example.ui.viewmodel.AuthState
+import androidx.compose.runtime.collectAsState
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun LoginScreen(onLoginSuccess: (UserRole) -> Unit) {
+fun LoginScreen(
+    authViewModel: AuthViewModel,
+    onLoginSuccess: (UserRole) -> Unit
+) {
+    val loginState by authViewModel.loginState.collectAsState()
+    val isLoading = loginState is AuthState.Loading
+
     var email by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
     var emailError by remember { mutableStateOf(false) }
     var passwordError by remember { mutableStateOf(false) }
     var showPassword by remember { mutableStateOf(false) }
-    var isLoading by remember { mutableStateOf(false) }
     
     var isVisible by remember { mutableStateOf(false) }
 
@@ -70,27 +78,24 @@ fun LoginScreen(onLoginSuccess: (UserRole) -> Unit) {
     val snackbarHostState = remember { SnackbarHostState() }
     val coroutineScope = rememberCoroutineScope()
 
+    LaunchedEffect(loginState) {
+        when (val state = loginState) {
+            is AuthState.Success -> {
+                onLoginSuccess(state.response.user.role)
+            }
+            is AuthState.Error -> {
+                snackbarHostState.showSnackbar(state.message)
+            }
+            else -> {}
+        }
+    }
+
     fun handleLogin() {
         emailError = email.isBlank()
         passwordError = password.isBlank()
 
         if (!emailError && !passwordError) {
-            isLoading = true
-            coroutineScope.launch {
-                // Simulate network call
-                delay(1200)
-                isLoading = false
-                if (email == "owner@warung.com" || email == "admin@warung.com" || email == "adminkantor@warung.com") {
-                    val role = when (email) {
-                        "owner@warung.com" -> UserRole.OWNER
-                        "adminkantor@warung.com" -> UserRole.ADMIN_KANTOR
-                        else -> UserRole.ADMIN_TOKO
-                    }
-                    onLoginSuccess(role)
-                } else {
-                    snackbarHostState.showSnackbar("Email atau password salah")
-                }
-            }
+            authViewModel.login(email, password)
         }
     }
 

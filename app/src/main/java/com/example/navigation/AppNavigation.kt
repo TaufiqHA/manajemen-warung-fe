@@ -10,7 +10,8 @@ import com.example.ui.screens.DashboardScreen
 import com.example.ui.screens.SalesScreen
 import com.example.ui.screens.SettingsScreen
 import com.example.data.UserRole
-
+import androidx.lifecycle.viewmodel.compose.viewModel
+import com.example.ui.viewmodel.AuthViewModel
 import com.example.ui.screens.MonthlyReportScreen
 
 @Composable
@@ -28,7 +29,9 @@ fun AppNavigation() {
             )
         }
         composable("login") {
+            val authViewModel: AuthViewModel = viewModel()
             LoginScreen(
+                authViewModel = authViewModel,
                 onLoginSuccess = { role ->
                     navController.navigate("dashboard/${role.name}") {
                         popUpTo("login") { inclusive = true }
