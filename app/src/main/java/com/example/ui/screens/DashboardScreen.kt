@@ -30,6 +30,12 @@ import com.example.ui.theme.SuccessColor
 import com.example.ui.theme.InfoColor
 import com.example.utils.formatRupiah
 import com.example.data.UserRole
+import com.example.data.RincianHarian
+import com.example.data.MenuTerlaris
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.KeyboardArrowUp
 
 // Enumeration for Bottom Navigation Tabs
 enum class DashboardTab(val label: String) {
@@ -97,6 +103,7 @@ data class MenuItem(
 )
 
 data class TransaksiHarian(
+    val idTransaksi: String,
     val id: String,
     val namaItem: String,
     val jumlah: Int,
@@ -176,10 +183,10 @@ fun DashboardScreen(
 
     val transaksiList = remember {
         mutableStateListOf(
-            TransaksiHarian("1", "Mie Ayam Extra Pedas", 3, 15000.0, "08:30", "Admin Toko", "Pedas level 5"),
-            TransaksiHarian("2", "Nasi Goreng Spesial", 2, 18000.0, "09:15", "Owner", ""),
-            TransaksiHarian("3", "Es Teh Manis Jumbo", 4, 4000.0, "11:00", "Admin Toko", "Es dikit"),
-            TransaksiHarian("4", "Ayam Bakar Madu", 2, 22000.0, "12:15", "Owner", "")
+            TransaksiHarian("TRX-20260521-001", "1", "Mie Ayam Extra Pedas", 3, 15000.0, "08:30", "Admin Toko", "Pedas level 5"),
+            TransaksiHarian("TRX-20260521-001", "2", "Nasi Goreng Spesial", 2, 18000.0, "08:30", "Admin Toko", ""),
+            TransaksiHarian("TRX-20260521-002", "3", "Es Teh Manis Jumbo", 4, 4000.0, "11:00", "Admin Toko", "Es dikit"),
+            TransaksiHarian("TRX-20260521-002", "4", "Ayam Bakar Madu", 2, 22000.0, "11:00", "Admin Toko", "")
         )
     }
 
@@ -491,7 +498,7 @@ fun PenjualanTabContent(
     var showActionChooser by remember { mutableStateOf(false) }
     var showAddForm by remember { mutableStateOf(false) }
     var showAddMenuForm by remember { mutableStateOf(false) }
-    var itemToDelete by remember { mutableStateOf<TransaksiHarian?>(null) }
+    var transactionIdToDelete by remember { mutableStateOf<String?>(null) }
     var selectedItemForDetail by remember { mutableStateOf<TransaksiHarian?>(null) }
 
     val coroutineScope = rememberCoroutineScope()
@@ -559,6 +566,10 @@ fun PenjualanTabContent(
                 fontWeight = FontWeight.Bold
             )
             Spacer(modifier = Modifier.height(8.dp))
+            val groupedTransactions = remember(transaksiList) {
+                transaksiList.groupBy { it.idTransaksi }
+            }
+            val expandedStates = remember { mutableStateMapOf<String, Boolean>() }
 
             if (transaksiList.isEmpty()) {
                 Box(modifier = Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
@@ -573,86 +584,133 @@ fun PenjualanTabContent(
                     modifier = Modifier.weight(1f),
                     verticalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
-                    items(transaksiList, key = { it.id }) { item ->
-                        val dismissState = rememberSwipeToDismissBoxState(
-                            confirmValueChange = {
-                                if (it == SwipeToDismissBoxValue.EndToStart) {
-                                    itemToDelete = item
-                                    false
-                                } else false
-                            }
-                        )
-                        SwipeToDismissBox(
-                            state = dismissState,
-                            backgroundContent = {
-                                val color by animateColorAsState(
-                                    when (dismissState.targetValue) {
-                                        SwipeToDismissBoxValue.EndToStart -> DangerColor
-                                        else -> Color.Transparent
-                                    }
-                                )
-                                Box(
-                                    modifier = Modifier
-                                        .fillMaxSize()
-                                        .background(color, RoundedCornerShape(8.dp))
-                                        .padding(horizontal = 20.dp),
-                                    contentAlignment = Alignment.CenterEnd
-                                ) {
-                                    Icon(AppIcons.Delete, contentDescription = "Hapus", tint = Color.White)
+                    groupedTransactions.forEach { (trxId, itemsInTrx) ->
+                        item(key = trxId) {
+                            val isExpanded = expandedStates[trxId] ?: false
+                            val totalTrxPrice = itemsInTrx.sumOf { it.jumlah * it.harga }
+                            val totalItems = itemsInTrx.size
+                            val time = itemsInTrx.firstOrNull()?.waktu ?: ""
+                            val cashier = itemsInTrx.firstOrNull()?.dicatatOleh ?: ""
+
+                            val dismissState = rememberSwipeToDismissBoxState(
+                                confirmValueChange = {
+                                    if (it == SwipeToDismissBoxValue.EndToStart) {
+                                        transactionIdToDelete = trxId
+                                        false
+                                    } else false
                                 }
-                            },
-                            content = {
-                                Card(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .clickable { selectedItemForDetail = item },
-                                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                                    shape = RoundedCornerShape(8.dp)
-                                ) {
-                                    Row(
+                            )
+                            SwipeToDismissBox(
+                                state = dismissState,
+                                backgroundContent = {
+                                    val color by animateColorAsState(
+                                        when (dismissState.targetValue) {
+                                            SwipeToDismissBoxValue.EndToStart -> DangerColor
+                                            else -> Color.Transparent
+                                        }
+                                    )
+                                    Box(
+                                        modifier = Modifier
+                                            .fillMaxSize()
+                                            .background(color, RoundedCornerShape(8.dp))
+                                            .padding(horizontal = 20.dp),
+                                        contentAlignment = Alignment.CenterEnd
+                                    ) {
+                                        Icon(AppIcons.Delete, contentDescription = "Hapus", tint = Color.White)
+                                    }
+                                },
+                                content = {
+                                    Card(
                                         modifier = Modifier
                                             .fillMaxWidth()
-                                            .padding(12.dp),
-                                        horizontalArrangement = Arrangement.SpaceBetween,
-                                        verticalAlignment = Alignment.CenterVertically
+                                            .clickable { expandedStates[trxId] = !isExpanded },
+                                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                                        shape = RoundedCornerShape(8.dp)
                                     ) {
-                                        Row(verticalAlignment = Alignment.CenterVertically) {
-                                            Box(
-                                                modifier = Modifier
-                                                    .size(40.dp)
-                                                    .background(
-                                                        MaterialTheme.colorScheme.primary.copy(alpha = 0.1f),
-                                                        CircleShape
-                                                    ),
-                                                contentAlignment = Alignment.Center
+                                        Column(modifier = Modifier.padding(12.dp)) {
+                                            Row(
+                                                modifier = Modifier.fillMaxWidth(),
+                                                horizontalArrangement = Arrangement.SpaceBetween,
+                                                verticalAlignment = Alignment.CenterVertically
                                             ) {
-                                                Text("🍜", style = MaterialTheme.typography.titleSmall)
+                                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                                    Box(
+                                                        modifier = Modifier
+                                                            .size(40.dp)
+                                                            .background(
+                                                                MaterialTheme.colorScheme.primary.copy(alpha = 0.1f),
+                                                                CircleShape
+                                                            ),
+                                                        contentAlignment = Alignment.Center
+                                                    ) {
+                                                        Text("🧾", style = MaterialTheme.typography.titleSmall)
+                                                    }
+                                                    Spacer(modifier = Modifier.width(12.dp))
+                                                    Column {
+                                                        Text(trxId, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)
+                                                        Text(
+                                                            text = "$time · $totalItems item · oleh $cashier",
+                                                            style = MaterialTheme.typography.labelMedium,
+                                                            color = Color.Gray
+                                                        )
+                                                    }
+                                                }
+                                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                                    Text(
+                                                        text = formatRupiah(totalTrxPrice.toLong()),
+                                                        style = MaterialTheme.typography.bodyMedium,
+                                                        fontWeight = FontWeight.Bold,
+                                                        color = SuccessColor
+                                                    )
+                                                    Spacer(modifier = Modifier.width(4.dp))
+                                                    Icon(
+                                                        imageVector = if (isExpanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
+                                                        contentDescription = "Expand/Collapse",
+                                                        tint = Color.Gray,
+                                                        modifier = Modifier.size(20.dp)
+                                                    )
+                                                }
                                             }
-                                            Spacer(modifier = Modifier.width(12.dp))
-                                            Column {
-                                                Text(item.namaItem, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)
-                                                Text(
-                                                    text = "${item.jumlah} porsi × ${formatRupiah(item.harga)}",
-                                                    style = MaterialTheme.typography.labelMedium,
-                                                    color = Color.Gray
-                                                )
-                                                Text(
-                                                    text = "${item.waktu} · oleh ${item.dicatatOleh}",
-                                                    style = MaterialTheme.typography.labelMedium.copy(fontSize = 11.sp),
-                                                    color = Color.LightGray
-                                                )
+
+                                            AnimatedVisibility(visible = isExpanded) {
+                                                Column(modifier = Modifier.padding(top = 12.dp)) {
+                                                    Divider(modifier = Modifier.padding(bottom = 8.dp))
+                                                    itemsInTrx.forEach { detail ->
+                                                        Row(
+                                                            modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)
+                                                                .clickable { selectedItemForDetail = detail },
+                                                            horizontalArrangement = Arrangement.SpaceBetween,
+                                                            verticalAlignment = Alignment.CenterVertically
+                                                        ) {
+                                                            Column {
+                                                                Text(detail.namaItem, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
+                                                                Text(
+                                                                    text = "${detail.jumlah} × ${formatRupiah(detail.harga.toLong())}",
+                                                                    style = MaterialTheme.typography.labelMedium,
+                                                                    color = Color.Gray
+                                                                )
+                                                                if (detail.catatan.isNotBlank()) {
+                                                                    Text(
+                                                                        text = "Catatan: ${detail.catatan}",
+                                                                        style = MaterialTheme.typography.labelSmall,
+                                                                        color = Color.LightGray
+                                                                    )
+                                                                }
+                                                            }
+                                                            Text(
+                                                                text = formatRupiah((detail.jumlah * detail.harga).toLong()),
+                                                                style = MaterialTheme.typography.bodyMedium,
+                                                                fontWeight = FontWeight.Bold
+                                                            )
+                                                        }
+                                                    }
+                                                }
                                             }
                                         }
-                                        Text(
-                                            text = formatRupiah(item.jumlah * item.harga),
-                                            style = MaterialTheme.typography.bodyMedium,
-                                            fontWeight = FontWeight.Bold,
-                                            color = SuccessColor
-                                        )
                                     }
                                 }
-                            }
-                        )
+                            )
+                        }
                     }
                 }
             }
@@ -940,8 +998,10 @@ fun PenjualanTabContent(
 
                             // Dynamic registration
                             val uniqueId = (transaksiList.size + 1).toString()
+                            val trxId = "TRX-20260521-00" + (transaksiList.distinctBy { it.idTransaksi }.size + 1)
                             transaksiList.add(
                                 TransaksiHarian(
+                                    idTransaksi = trxId,
                                     id = uniqueId,
                                     namaItem = namaItem,
                                     jumlah = qty.toIntOrNull() ?: 1,
@@ -966,15 +1026,17 @@ fun PenjualanTabContent(
         }
 
         // ---------- CONFIRM DELETE DIALOG ----------
-        itemToDelete?.let { item ->
+        transactionIdToDelete?.let { trxId ->
+            val itemsToDelete = transaksiList.filter { it.idTransaksi == trxId }
+            val totalValue = itemsToDelete.sumOf { it.jumlah * it.harga }
             ConfirmDialog(
                 title = "Hapus Transaksi?",
-                text = "Transaksi ${item.namaItem} senilai ${formatRupiah(item.jumlah * item.harga)} akan dihapus.",
+                text = "Seluruh item pada Transaksi $trxId senilai ${formatRupiah(totalValue)} akan dihapus.",
                 onConfirm = {
-                    transaksiList.remove(item)
-                    itemToDelete = null
+                    transaksiList.removeAll(itemsToDelete)
+                    transactionIdToDelete = null
                 },
-                onDismiss = { itemToDelete = null }
+                onDismiss = { transactionIdToDelete = null }
             )
         }
 
@@ -1488,6 +1550,58 @@ fun LabaRugiTabContent(
     val totalBiaya = biayaList.sumOf { it.jumlah } * multiplier
     val labaBersih = totalPemasukan - totalBiaya
 
+    val rincianList = when (selectedLabaDateFilter) {
+        "Hari Ini" -> listOf(
+            RincianHarian("Kamis, 29 Mei 2026", 4, 141000)
+        )
+        "7 Hari" -> listOf(
+            RincianHarian("Kamis, 29 Mei 2026", 4, 141000),
+            RincianHarian("Rabu, 28 Mei 2026", 2, 85000),
+            RincianHarian("Selasa, 27 Mei 2026", 6, 230000)
+        )
+        "Bulan Ini" -> listOf(
+            RincianHarian("Kamis, 29 Mei 2026", 4, 141000),
+            RincianHarian("Rabu, 28 Mei 2026", 2, 85000),
+            RincianHarian("Selasa, 27 Mei 2026", 6, 230000),
+            RincianHarian("Senin, 26 Mei 2026", 3, 115000),
+            RincianHarian("Minggu, 25 Mei 2026", 5, 195000)
+        )
+        else -> listOf(
+            RincianHarian("Kamis, 29 Mei 2026", 4, 141000),
+            RincianHarian("Rabu, 28 Mei 2026", 2, 85000),
+            RincianHarian("Selasa, 27 Mei 2026", 6, 230000),
+            RincianHarian("Senin, 26 Mei 2026", 3, 115000),
+            RincianHarian("Minggu, 25 Mei 2026", 5, 195000),
+            RincianHarian("Sabtu, 24 Mei 2026", 8, 310000),
+            RincianHarian("Jumat, 23 Mei 2026", 4, 160000)
+        )
+    }
+
+    val menuTerlarisList = when (selectedLabaDateFilter) {
+        "Hari Ini" -> listOf(
+            MenuTerlaris("Mie Ayam Extra Pedas", 5, 75000, 1),
+            MenuTerlaris("Es Teh Manis Jumbo", 3, 12000, 2)
+        )
+        "7 Hari" -> listOf(
+            MenuTerlaris("Mie Ayam Extra Pedas", 12, 180000, 1),
+            MenuTerlaris("Nasi Goreng Spesial", 10, 180000, 2),
+            MenuTerlaris("Ayam Bakar Madu", 6, 132000, 3),
+            MenuTerlaris("Es Teh Manis Jumbo", 4, 16000, 4)
+        )
+        "Bulan Ini" -> listOf(
+            MenuTerlaris("Mie Ayam Extra Pedas", 15, 225000, 1),
+            MenuTerlaris("Nasi Goreng Spesial", 12, 216000, 2),
+            MenuTerlaris("Ayam Bakar Madu", 8, 176000, 3),
+            MenuTerlaris("Es Teh Manis Jumbo", 5, 20000, 4)
+        )
+        else -> listOf(
+            MenuTerlaris("Mie Ayam Extra Pedas", 45, 675000, 1),
+            MenuTerlaris("Nasi Goreng Spesial", 38, 684000, 2),
+            MenuTerlaris("Ayam Bakar Madu", 24, 528000, 3),
+            MenuTerlaris("Es Teh Manis Jumbo", 20, 80000, 4)
+        )
+    }
+
     Column(
         modifier = modifier
             .fillMaxSize()
@@ -1615,6 +1729,126 @@ fun LabaRugiTabContent(
                 }
             }
         }
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        Text(
+            text = "Rincian Harian",
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.Bold,
+            modifier = Modifier.padding(bottom = 12.dp)
+        )
+
+        Card(
+            modifier = Modifier.fillMaxWidth().padding(bottom = 24.dp),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+            shape = RoundedCornerShape(12.dp),
+            elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+        ) {
+            Column(modifier = Modifier.padding(16.dp)) {
+                Text(
+                    text = "Mei 2026",
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.padding(bottom = 8.dp)
+                )
+                
+                if (rincianList.isEmpty()) {
+                    Text(
+                        text = "Belum ada rincian harian",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = Color.Gray,
+                        modifier = Modifier.padding(vertical = 8.dp)
+                    )
+                } else {
+                    rincianList.forEachIndexed { index, item ->
+                        if (index > 0) {
+                            Divider(modifier = Modifier.padding(vertical = 8.dp))
+                        }
+                        Column(modifier = Modifier.fillMaxWidth()) {
+                            Text(
+                                text = item.tanggal,
+                                style = MaterialTheme.typography.bodyMedium,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text(
+                                text = "${item.jumlahOrder} kali order  •  ${formatRupiah(item.totalPenjualan)}",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = Color.Gray
+                            )
+                        }
+                    }
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        Text(
+            text = "🏆 Menu Terlaris",
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.Bold,
+            modifier = Modifier.padding(bottom = 12.dp)
+        )
+
+        Card(
+            modifier = Modifier.fillMaxWidth().padding(bottom = 24.dp),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+            shape = RoundedCornerShape(12.dp),
+            elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+        ) {
+            Column(modifier = Modifier.padding(16.dp)) {
+                if (menuTerlarisList.isEmpty()) {
+                    Text(
+                        text = "Belum ada data penjualan",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = Color.Gray,
+                        modifier = Modifier.padding(vertical = 8.dp)
+                    )
+                } else {
+                    menuTerlarisList.forEachIndexed { index, item ->
+                        if (index > 0) {
+                            Divider(modifier = Modifier.padding(vertical = 8.dp))
+                        }
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            val rankColor = when (item.ranking) {
+                                1 -> Color(0xFFFFD700) // Gold
+                                2 -> Color(0xFFC0C0C0) // Silver
+                                3 -> Color(0xFFCD7F32) // Bronze
+                                else -> MaterialTheme.colorScheme.onSurface
+                            }
+                            Column {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Text(
+                                        text = "#${item.ranking} ",
+                                        fontWeight = FontWeight.Bold,
+                                        color = rankColor,
+                                        style = MaterialTheme.typography.bodyMedium
+                                    )
+                                    Text(
+                                        text = item.namaBarang,
+                                        fontWeight = FontWeight.Bold,
+                                        style = MaterialTheme.typography.bodyMedium
+                                    )
+                                }
+                                Spacer(modifier = Modifier.height(4.dp))
+                                Text(
+                                    text = "${item.totalQty} porsi terjual  •  ${formatRupiah(item.totalPendapatan)}",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = Color.Gray
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
     }
 }
 
@@ -1627,6 +1861,11 @@ fun BarangTabContent(
     modifier: Modifier = Modifier
 ) {
     var showAddMenuForm by remember { mutableStateOf(false) }
+    var itemToEdit by remember { mutableStateOf<MenuItem?>(null) }
+    var editNamaMenu by remember { mutableStateOf("") }
+    var editHargaMenu by remember { mutableStateOf("") }
+    var editError by remember { mutableStateOf(false) }
+
     val coroutineScope = rememberCoroutineScope()
 
     Box(modifier = modifier.fillMaxSize()) {
@@ -1668,13 +1907,23 @@ fun BarangTabContent(
                                     Text(formatRupiah(item.harga), style = MaterialTheme.typography.bodySmall, color = Color.Gray)
                                 }
                                 if (role == UserRole.ADMIN_TOKO.displayName || role == UserRole.OWNER.displayName) {
-                                    IconButton(onClick = { 
-                                        menuList.remove(item)
-                                        coroutineScope.launch {
-                                            snackbarHostState.showSnackbar("Barang berhasil dihapus")
+                                    Row {
+                                        IconButton(onClick = { 
+                                            itemToEdit = item
+                                            editNamaMenu = item.nama
+                                            editHargaMenu = item.harga.toLong().toString()
+                                            editError = false
+                                        }) {
+                                            Icon(AppIcons.Edit, contentDescription = "Edit", tint = MaterialTheme.colorScheme.primary)
                                         }
-                                    }) {
-                                        Icon(AppIcons.Delete, contentDescription = "Hapus", tint = DangerColor)
+                                        IconButton(onClick = { 
+                                            menuList.remove(item)
+                                            coroutineScope.launch {
+                                                snackbarHostState.showSnackbar("Barang berhasil dihapus")
+                                            }
+                                        }) {
+                                            Icon(AppIcons.Delete, contentDescription = "Hapus", tint = DangerColor)
+                                        }
                                     }
                                 }
                             }
@@ -1736,6 +1985,69 @@ fun BarangTabContent(
                 },
                 dismissButton = {
                     TextButton(onClick = { showAddMenuForm = false }) {
+                        Text("Batal")
+                    }
+                }
+            )
+        }
+
+        itemToEdit?.let { currentItem ->
+            AlertDialog(
+                onDismissRequest = { itemToEdit = null },
+                title = { Text("Edit Barang") },
+                text = {
+                    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                        OutlinedTextField(
+                            value = editNamaMenu,
+                            onValueChange = { 
+                                editNamaMenu = it
+                                editError = false
+                            },
+                            label = { Text("Nama Barang") },
+                            isError = editError && editNamaMenu.isBlank(),
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                        OutlinedTextField(
+                            value = editHargaMenu,
+                            onValueChange = { 
+                                editHargaMenu = it
+                                editError = false
+                            },
+                            label = { Text("Harga") },
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                            isError = editError && (editHargaMenu.toDoubleOrNull() ?: 0.0) <= 0.0,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                        if (editError) {
+                            Text(
+                                text = "Nama tidak boleh kosong & harga harus valid", 
+                                color = DangerColor, 
+                                style = MaterialTheme.typography.labelSmall
+                            )
+                        }
+                    }
+                },
+                confirmButton = {
+                    Button(onClick = {
+                        val h = editHargaMenu.toDoubleOrNull() ?: 0.0
+                        if (editNamaMenu.isNotBlank() && h > 0) {
+                            val index = menuList.indexOfFirst { it.id == currentItem.id }
+                            if (index != -1) {
+                                menuList[index] = currentItem.copy(nama = editNamaMenu, harga = h)
+                                coroutineScope.launch {
+                                    snackbarHostState.showSnackbar("Barang berhasil diupdate")
+                                }
+                            }
+                            itemToEdit = null
+                        } else {
+                            editError = true
+                        }
+                    }) {
+                        Text("Simpan")
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { itemToEdit = null }) {
                         Text("Batal")
                     }
                 }

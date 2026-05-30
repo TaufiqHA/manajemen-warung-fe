@@ -18,5 +18,8 @@ data class Transaction(
     val kodeTransaksi: String,
     val tanggalTransaksi: Long, // Use timestamp for simplicity
     val items: List<TransactionItem>,
-    val totalHarga: Long
+    val totalHarga: Long,
+    val diskonPersen: Double = 0.0,
+    val diskonNominal: Long = 0L,
+    val totalSetelahDiskon: Long = totalHarga
 )

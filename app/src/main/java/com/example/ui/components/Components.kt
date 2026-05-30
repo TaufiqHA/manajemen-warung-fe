@@ -42,14 +42,16 @@ fun AutocompleteItemDropdown(
     ) {
         OutlinedTextField(
             value = query,
-            onValueChange = { onQueryChanged(it) },
+            onValueChange = { },
+            readOnly = true,
+            singleLine = true,
             label = { Text("Nama Barang") },
             modifier = Modifier.menuAnchor().fillMaxWidth(),
             trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = isExpanded) },
             colors = ExposedDropdownMenuDefaults.outlinedTextFieldColors()
         )
 
-        if (filteredItems.isNotEmpty() && query.isNotBlank()) {
+        if (filteredItems.isNotEmpty()) {
             ExposedDropdownMenu(
                 expanded = isExpanded,
                 onDismissRequest = { onExpandedChanged(false) }
@@ -57,7 +59,11 @@ fun AutocompleteItemDropdown(
                 filteredItems.forEach { item ->
                     DropdownMenuItem(
                         text = { Text(item.name) },
-                        onClick = { onItemSelected(item) }
+                        onClick = {
+                            onQueryChanged(item.name)
+                            onItemSelected(item)
+                            onExpandedChanged(false)
+                        }
                     )
                 }
             }

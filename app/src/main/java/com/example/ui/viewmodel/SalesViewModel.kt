@@ -1,20 +1,40 @@
 package com.example.ui.viewmodel
 
 import androidx.compose.runtime.mutableStateListOf
-import androidx.lifecycle.ViewModel
+import android.app.Application
+import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import android.bluetooth.BluetoothDevice
 import com.example.data.Item
 import com.example.data.Transaction
 import com.example.data.TransactionItem
+import com.example.data.UserPreferences
+import com.example.utils.PrinterHelper
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.*
 
-class SalesViewModel : ViewModel() {
+class SalesViewModel(application: Application) : AndroidViewModel(application) {
+    private val userPrefs = UserPreferences(application)
+
+    val namaWarungState = userPrefs.namaWarung.stateIn(
+        scope = viewModelScope,
+        started = SharingStarted.Eagerly,
+        initialValue = "WARUNG KITA"
+    )
+
+    val alamatWarungState = userPrefs.alamatWarung.stateIn(
+        scope = viewModelScope,
+        started = SharingStarted.Eagerly,
+        initialValue = ""
+    )
+
     private val _cartItems = mutableStateListOf<TransactionItem>()
     val cartItems: List<TransactionItem> = _cartItems
 
@@ -90,13 +110,16 @@ class SalesViewModel : ViewModel() {
         _cartItems.clear()
     }
 
-    fun processTransaction(): Transaction {
+    fun processTransaction(diskonPersen: Double = 0.0, diskonNominal: Long = 0L, totalSetelahDiskon: Long = totalHarga): Transaction {
         val kode = "TRX-${SimpleDateFormat("yyyyMMdd-HHmmss", Locale.getDefault()).format(Date())}"
         val transaction = Transaction(
             kodeTransaksi = kode,
             tanggalTransaksi = System.currentTimeMillis(),
             items = _cartItems.toList(),
-            totalHarga = totalHarga
+            totalHarga = totalHarga,
+            diskonPersen = diskonPersen,
+            diskonNominal = diskonNominal,
+            totalSetelahDiskon = totalSetelahDiskon
         )
         // In a real app, we would save this to a database
         return transaction
@@ -107,7 +130,23 @@ class SalesViewModel : ViewModel() {
         val dateStr = sdf.format(Date(transaction.tanggalTransaksi))
         
         val sb = StringBuilder()
-        sb.append("      WARUNG KITA      \n")
+        
+        val namaWarungUpper = namaWarungState.value.uppercase()
+        val namaPadding = (30 - namaWarungUpper.length) / 2
+        val namaLine = " ".repeat(namaPadding.coerceAtLeast(0)) + namaWarungUpper + "\n"
+        sb.append(namaLine)
+
+        val alamat = alamatWarungState.value
+        if (alamat.isNotBlank()) {
+            val alamatLine = if (alamat.length > 30) {
+                alamat.take(30)
+            } else {
+                val pad = (30 - alamat.length) / 2
+                " ".repeat(pad.coerceAtLeast(0)) + alamat
+            }
+            sb.append(alamatLine + "\n")
+        }
+        
         sb.append("------------------------------\n")
         sb.append("No: ${transaction.kodeTransaksi}\n")
         sb.append("Tgl: $dateStr\n")
@@ -122,8 +161,24 @@ class SalesViewModel : ViewModel() {
         }
         
         sb.append("------------------------------\n")
+        if (transaction.diskonNominal > 0) {
+            val subtotalLabel = "Subtotal"
+            val subtotalVal = transaction.totalHarga.toString()
+            val subPadding = 30 - subtotalLabel.length - subtotalVal.length
+            sb.append(subtotalLabel + " ".repeat(subPadding.coerceAtLeast(1)) + subtotalVal + "\n")
+            
+            val discLabel = if (transaction.diskonPersen > 0) {
+                "Diskon (${transaction.diskonPersen.toLong()}%)"
+            } else {
+                "Diskon"
+            }
+            val discVal = "-${transaction.diskonNominal}"
+            val discPadding = 30 - discLabel.length - discVal.length
+            sb.append(discLabel + " ".repeat(discPadding.coerceAtLeast(1)) + discVal + "\n")
+            sb.append("------------------------------\n")
+        }
         val totalLabel = "TOTAL"
-        val totalVal = transaction.totalHarga.toString()
+        val totalVal = transaction.totalSetelahDiskon.toString()
         val totalPadding = 30 - totalLabel.length - totalVal.length
         sb.append(totalLabel + " ".repeat(totalPadding.coerceAtLeast(1)) + totalVal + "\n")
         sb.append("------------------------------\n")
@@ -131,5 +186,12 @@ class SalesViewModel : ViewModel() {
         sb.append("  Selamat Belanja Lagi  \n")
         
         return sb.toString()
+    }
+
+    fun printToThermal(device: BluetoothDevice, receiptText: String, onComplete: (Boolean) -> Unit) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val success = PrinterHelper.printReceipt(device, receiptText)
+            onComplete(success)
+        }
     }
 }

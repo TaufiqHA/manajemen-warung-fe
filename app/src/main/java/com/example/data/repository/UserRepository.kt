@@ -1,31 +1,28 @@
 package com.example.data.repository
 
 import android.content.Context
+import com.example.data.UserData
 import com.example.data.UserResponse
-import com.example.data.api.RetrofitClient
+import com.example.data.UserRole
 import com.example.utils.TokenManager
+import kotlinx.coroutines.delay
 
 class UserRepository(private val context: Context) {
-    private val userApiService = RetrofitClient.getUserApiService(context)
     private val tokenManager = TokenManager(context)
 
     suspend fun getCurrentUser(): Result<UserResponse> {
         return try {
-            val response = userApiService.getCurrentUser()
-            if (response.isSuccessful && response.body() != null) {
-                val userResponse = response.body()!!
-                
-                // Update local cached user info
-                tokenManager.saveUser(
-                    id = userResponse.user.id,
-                    username = userResponse.user.username,
-                    role = userResponse.user.role.name
-                )
-                
-                Result.success(userResponse)
+            delay(500)
+            val userId = tokenManager.getUserId()
+            val userName = tokenManager.getUserName()
+            val userRoleStr = tokenManager.getUserRole()
+            
+            if (userId != null && userName != null && userRoleStr != null) {
+                val role = try { UserRole.valueOf(userRoleStr) } catch(e: Exception) { UserRole.ADMIN_TOKO }
+                val mockUser = UserData(id = userId, username = userName, email = "mock@warung.com", role = role)
+                Result.success(UserResponse(user = mockUser))
             } else {
-                val errorMsg = response.errorBody()?.string() ?: "Failed to get user profile"
-                Result.failure(Exception(errorMsg))
+                Result.failure(Exception("User not logged in"))
             }
         } catch (e: Exception) {
             Result.failure(e)

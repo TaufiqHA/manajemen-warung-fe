@@ -20,7 +20,7 @@ import java.io.FileOutputStream
 import java.text.NumberFormat
 import java.util.*
 
-fun generateQuotationPdf(context: Context, data: TransactionModel) {
+fun generateQuotationPdf(context: Context, data: TransactionModel, shopName: String = "TOKO KAMI") {
     // 1. Setup File Output
     val logoManager = LogoManager(context)
     val logoPath = logoManager.getLogoPath()
@@ -50,7 +50,7 @@ fun generateQuotationPdf(context: Context, data: TransactionModel) {
         logoImage.setBorderRadius(BorderRadius(100f))
         leftHeader.add(logoImage)
     } else {
-        leftHeader.add(Paragraph("TOKO KAMI").setBold().setFontSize(14f))
+        leftHeader.add(Paragraph(shopName).setBold().setFontSize(14f))
     }
 
     leftHeader.add(Paragraph("\nKepada Yth:"))

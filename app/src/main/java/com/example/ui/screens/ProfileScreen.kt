@@ -23,6 +23,9 @@ import com.example.data.UserRole
 import com.example.ui.components.ProfileMenuItem
 import com.example.ui.components.ConfirmDialog
 import com.example.ui.theme.DangerColor
+import com.example.ui.theme.SuccessColor
+import com.example.ui.viewmodel.ProfilViewModel
+import androidx.lifecycle.viewmodel.compose.viewModel
 
 @Composable
 fun ProfilTabContent(
@@ -158,6 +161,117 @@ fun ProfilTabContent(
         }
 
         Spacer(modifier = Modifier.height(16.dp))
+
+        // --- Card: Pengaturan Akun ---
+        if (userRole == UserRole.OWNER) {
+            val profilViewModel: ProfilViewModel = viewModel()
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(12.dp),
+                elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    Text(
+                        text = "Pengaturan Akun",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                    
+                    // Nama Warung
+                    Column {
+                        OutlinedTextField(
+                            value = profilViewModel.namaInput,
+                            onValueChange = { profilViewModel.namaInput = it },
+                            label = { Text("Nama Warung") },
+                            isError = profilViewModel.namaError != null,
+                            singleLine = true,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                        if (profilViewModel.namaError != null) {
+                            Text(
+                                text = profilViewModel.namaError ?: "",
+                                color = DangerColor,
+                                style = MaterialTheme.typography.labelSmall,
+                                modifier = Modifier.padding(top = 4.dp)
+                            )
+                        }
+                    }
+
+                    // Alamat Warung
+                    Column {
+                        OutlinedTextField(
+                            value = profilViewModel.alamatInput,
+                            onValueChange = { profilViewModel.alamatInput = it },
+                            label = { Text("Alamat Warung") },
+                            isError = profilViewModel.alamatError != null,
+                            maxLines = 2,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                        if (profilViewModel.alamatError != null) {
+                            Text(
+                                text = profilViewModel.alamatError ?: "",
+                                color = DangerColor,
+                                style = MaterialTheme.typography.labelSmall,
+                                modifier = Modifier.padding(top = 4.dp)
+                            )
+                        }
+                    }
+
+                    // Email
+                    Column {
+                        OutlinedTextField(
+                            value = profilViewModel.emailInput,
+                            onValueChange = { profilViewModel.emailInput = it },
+                            label = { Text("Email") },
+                            isError = profilViewModel.emailError != null,
+                            singleLine = true,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                        if (profilViewModel.emailError != null) {
+                            Text(
+                                text = profilViewModel.emailError ?: "",
+                                color = DangerColor,
+                                style = MaterialTheme.typography.labelSmall,
+                                modifier = Modifier.padding(top = 4.dp)
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(4.dp))
+
+                    // Actions row
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Button(
+                            onClick = { profilViewModel.saveProfile() },
+                            colors = ButtonDefaults.buttonColors(containerColor = SuccessColor),
+                            shape = RoundedCornerShape(8.dp),
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Text("Simpan Perubahan", color = Color.White)
+                        }
+
+                        OutlinedButton(
+                            onClick = { profilViewModel.resetForm() },
+                            shape = RoundedCornerShape(8.dp),
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Text("Batal")
+                        }
+                    }
+                }
+            }
+            Spacer(modifier = Modifier.height(16.dp))
+        }
 
         // 3. Card Group 2: Informasi & Bantuan
         Card(
