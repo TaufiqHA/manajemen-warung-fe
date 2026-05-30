@@ -6,6 +6,8 @@ import android.net.Uri
 import android.os.Environment
 import androidx.core.content.FileProvider
 import com.example.data.TransactionModel
+import com.example.ui.screens.BiayaOperasional
+import com.example.ui.screens.TransaksiHarian
 import com.itextpdf.io.image.ImageDataFactory
 import com.itextpdf.kernel.geom.PageSize
 import com.itextpdf.kernel.pdf.PdfDocument
@@ -154,4 +156,126 @@ fun openPdfFile(context: Context, file: File) {
     intent.setDataAndType(uri, "application/pdf")
     intent.flags = Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_CLEAR_TOP
     context.startActivity(intent)
+}
+
+fun generateLaporanBiayaPdf(context: Context, biayaList: List<BiayaOperasional>) {
+    val fileName = "Laporan_Biaya_${System.currentTimeMillis()}.pdf"
+    val file = File(context.getExternalFilesDir(Environment.DIRECTORY_DOCUMENTS), fileName)
+    val writer = PdfWriter(FileOutputStream(file))
+    val pdf = PdfDocument(writer)
+    val document = Document(pdf, PageSize.A4)
+    
+    val formatRupiah = { amount: Double ->
+        val format = NumberFormat.getCurrencyInstance(Locale("in", "ID"))
+        format.format(amount).replace("Rp", "Rp. ").replace(",00", "")
+    }
+
+    // Title
+    document.add(Paragraph("LAPORAN BIAYA OPERASIONAL").setBold().setFontSize(18f).setTextAlignment(TextAlignment.CENTER))
+    document.add(Paragraph("Tanggal Cetak: " + java.text.SimpleDateFormat("d MMMM yyyy HH:mm", Locale("in", "ID")).format(Date())).setFontSize(10f))
+    document.add(Paragraph("\n"))
+
+    // Table
+    val table = Table(UnitValue.createPercentArray(floatArrayOf(10f, 25f, 35f, 15f, 15f))).useAllAvailableWidth()
+    val headers = arrayOf("No", "Tanggal", "Keterangan", "Kategori", "Jumlah")
+    headers.forEach { h ->
+        table.addHeaderCell(Cell().add(Paragraph(h).setBold().setTextAlignment(TextAlignment.CENTER)))
+    }
+
+    biayaList.forEachIndexed { index, item ->
+        table.addCell(Cell().add(Paragraph((index + 1).toString()).setTextAlignment(TextAlignment.CENTER)))
+        table.addCell(Cell().add(Paragraph(item.tanggal)))
+        table.addCell(Cell().add(Paragraph(item.keterangan)))
+        table.addCell(Cell().add(Paragraph(item.kategori)))
+        table.addCell(Cell().add(Paragraph(formatRupiah(item.jumlah)).setTextAlignment(TextAlignment.RIGHT)))
+    }
+    
+    document.add(table)
+    document.add(Paragraph("\n"))
+
+    // Total Summary
+    val totalAmount = biayaList.sumOf { it.jumlah }
+    val summaryTable = Table(UnitValue.createPercentArray(floatArrayOf(70f, 30f))).useAllAvailableWidth()
+    summaryTable.addCell(Cell().add(Paragraph("Total Pengeluaran").setBold()).setBorder(com.itextpdf.layout.borders.Border.NO_BORDER))
+    summaryTable.addCell(Cell().add(Paragraph(formatRupiah(totalAmount)).setBold().setTextAlignment(TextAlignment.RIGHT)).setBorder(com.itextpdf.layout.borders.Border.NO_BORDER))
+    
+    document.add(summaryTable)
+
+    document.close()
+    openPdfFile(context, file)
+}
+
+fun generateLabaRugiPdf(context: Context, transaksiList: List<TransaksiHarian>, biayaList: List<BiayaOperasional>, filterName: String) {
+    val fileName = "Laporan_Laba_Rugi_${System.currentTimeMillis()}.pdf"
+    val file = File(context.getExternalFilesDir(Environment.DIRECTORY_DOCUMENTS), fileName)
+    val writer = PdfWriter(FileOutputStream(file))
+    val pdf = PdfDocument(writer)
+    val document = Document(pdf, PageSize.A4)
+
+    val formatRupiah = { amount: Double ->
+        val format = NumberFormat.getCurrencyInstance(Locale("in", "ID"))
+        format.format(amount).replace("Rp", "Rp. ").replace(",00", "")
+    }
+
+    // Title
+    document.add(Paragraph("LAPORAN RINGKASAN LABA-RUGI").setBold().setFontSize(18f).setTextAlignment(TextAlignment.CENTER))
+    document.add(Paragraph("Periode/Filter: $filterName").setFontSize(11f).setTextAlignment(TextAlignment.CENTER))
+    document.add(Paragraph("Tanggal Cetak: " + java.text.SimpleDateFormat("d MMMM yyyy HH:mm", Locale("in", "ID")).format(Date())).setFontSize(10f))
+    document.add(Paragraph("\n"))
+
+    // Financial Agregates Table
+    val totalPemasukan = transaksiList.sumOf { it.jumlah * it.harga }
+    val totalPengeluaran = biayaList.sumOf { it.jumlah }
+    val labaBersih = totalPemasukan - totalPengeluaran
+
+    val summaryTable = Table(UnitValue.createPercentArray(floatArrayOf(60f, 40f))).useAllAvailableWidth()
+    summaryTable.addCell(Cell().add(Paragraph("TOTAL PENDAPATAN (PENJUALAN)").setBold()))
+    summaryTable.addCell(Cell().add(Paragraph(formatRupiah(totalPemasukan)).setBold().setTextAlignment(TextAlignment.RIGHT)))
+
+    summaryTable.addCell(Cell().add(Paragraph("TOTAL PENGELUARAN (BIAYA OPERASIONAL)").setBold()))
+    summaryTable.addCell(Cell().add(Paragraph(formatRupiah(totalPengeluaran)).setBold().setTextAlignment(TextAlignment.RIGHT)))
+
+    val profitCell = Cell().add(Paragraph("LABA BERSIH").setBold().setFontSize(14f))
+    val profitValCell = Cell().add(Paragraph(formatRupiah(labaBersih)).setBold().setFontSize(14f).setTextAlignment(TextAlignment.RIGHT))
+    summaryTable.addCell(profitCell)
+    summaryTable.addCell(profitValCell)
+
+    document.add(summaryTable)
+    document.add(Paragraph("\n"))
+
+    // Breakdown Section - Pemasukan
+    document.add(Paragraph("Rincian Transaksi Penjualan").setBold().setFontSize(12f))
+    val trxTable = Table(UnitValue.createPercentArray(floatArrayOf(15f, 25f, 30f, 10f, 20f))).useAllAvailableWidth()
+    val trxHeaders = arrayOf("No TRX", "Waktu", "Item", "Qty", "Jumlah")
+    trxHeaders.forEach { h ->
+        trxTable.addHeaderCell(Cell().add(Paragraph(h).setBold().setTextAlignment(TextAlignment.CENTER)))
+    }
+    transaksiList.forEach { item ->
+        trxTable.addCell(Cell().add(Paragraph(item.idTransaksi).setFontSize(9f)))
+        trxTable.addCell(Cell().add(Paragraph(item.waktu).setFontSize(9f)))
+        trxTable.addCell(Cell().add(Paragraph(item.namaItem).setFontSize(9f)))
+        trxTable.addCell(Cell().add(Paragraph(item.jumlah.toString()).setTextAlignment(TextAlignment.CENTER).setFontSize(9f)))
+        trxTable.addCell(Cell().add(Paragraph(formatRupiah(item.jumlah * item.harga)).setTextAlignment(TextAlignment.RIGHT).setFontSize(9f)))
+    }
+    document.add(trxTable)
+    
+    document.add(Paragraph("\n"))
+
+    // Breakdown Section - Pengeluaran
+    document.add(Paragraph("Rincian Pengeluaran / Biaya").setBold().setFontSize(12f))
+    val costTable = Table(UnitValue.createPercentArray(floatArrayOf(20f, 25f, 35f, 20f))).useAllAvailableWidth()
+    val costHeaders = arrayOf("Tanggal", "Kategori", "Keterangan", "Nominal")
+    costHeaders.forEach { h ->
+        costTable.addHeaderCell(Cell().add(Paragraph(h).setBold().setTextAlignment(TextAlignment.CENTER)))
+    }
+    biayaList.forEach { item ->
+        costTable.addCell(Cell().add(Paragraph(item.tanggal).setFontSize(9f)))
+        costTable.addCell(Cell().add(Paragraph(item.kategori).setFontSize(9f)))
+        costTable.addCell(Cell().add(Paragraph(item.keterangan).setFontSize(9f)))
+        costTable.addCell(Cell().add(Paragraph(formatRupiah(item.jumlah)).setTextAlignment(TextAlignment.RIGHT).setFontSize(9f)))
+    }
+    document.add(costTable)
+
+    document.close()
+    openPdfFile(context, file)
 }

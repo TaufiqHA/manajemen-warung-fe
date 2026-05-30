@@ -46,6 +46,8 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.ui.text.font.FontFamily
 import com.example.utils.generateQuotationPdf
+import com.example.utils.generateLaporanBiayaPdf
+import com.example.utils.generateLabaRugiPdf
 import com.example.data.InvoiceItem
 import com.example.data.TransactionModel
 import com.example.data.Transaction
@@ -1457,8 +1459,43 @@ fun BiayaTabContent(
     var showAddForm by remember { mutableStateOf(false) }
     var itemToDelete by remember { mutableStateOf<BiayaOperasional?>(null) }
     var selectedItemForDetail by remember { mutableStateOf<BiayaOperasional?>(null) }
+    var itemToEdit by remember { mutableStateOf<BiayaOperasional?>(null) }
 
     val categories = listOf("Semua", "Bahan Baku", "Biaya Operasional", "Biaya dll")
+
+    var selectedDateFilter by remember { mutableStateOf("Bulan Ini") }
+    val dates = listOf("Hari Ini", "Minggu Ini", "Bulan Ini", "Bulan Lalu", "Semua")
+
+    fun getCalendarForBiaya(tanggalStr: String): java.util.Calendar? {
+        return try {
+            val sdf = java.text.SimpleDateFormat("d MMMM yyyy", java.util.Locale("in", "ID"))
+            val date = sdf.parse(tanggalStr) ?: return null
+            val cal = java.util.Calendar.getInstance()
+            cal.time = date
+            cal
+        } catch (e: Exception) {
+            null
+        }
+    }
+
+    fun isBiayaMatchingFilter(tanggalStr: String, filter: String): Boolean {
+        val cal = getCalendarForBiaya(tanggalStr) ?: return false
+        val today = java.util.Calendar.getInstance()
+        return when (filter) {
+            "Hari Ini" -> cal.get(java.util.Calendar.YEAR) == today.get(java.util.Calendar.YEAR) && cal.get(java.util.Calendar.DAY_OF_YEAR) == today.get(java.util.Calendar.DAY_OF_YEAR)
+            "Minggu Ini" -> cal.get(java.util.Calendar.YEAR) == today.get(java.util.Calendar.YEAR) && cal.get(java.util.Calendar.WEEK_OF_YEAR) == today.get(java.util.Calendar.WEEK_OF_YEAR)
+            "Bulan Ini" -> cal.get(java.util.Calendar.YEAR) == today.get(java.util.Calendar.YEAR) && cal.get(java.util.Calendar.MONTH) == today.get(java.util.Calendar.MONTH)
+            "Bulan Lalu" -> {
+                val lastMonth = java.util.Calendar.getInstance().apply { add(java.util.Calendar.MONTH, -1) }
+                cal.get(java.util.Calendar.YEAR) == lastMonth.get(java.util.Calendar.YEAR) && cal.get(java.util.Calendar.MONTH) == lastMonth.get(java.util.Calendar.MONTH)
+            }
+            else -> true
+        }
+    }
+
+    val filteredList = remember(biayaList.toList(), selectedDateFilter) {
+        if (selectedDateFilter == "Semua") biayaList else biayaList.filter { isBiayaMatchingFilter(it.tanggal, selectedDateFilter) }
+    }
 
     Box(modifier = modifier.fillMaxSize()) {
         Column(
@@ -1468,42 +1505,21 @@ fun BiayaTabContent(
                 .verticalScroll(rememberScrollState())
         ) {
             Spacer(modifier = Modifier.height(28.dp))
-            Text(
-                text = "Laporan Biaya",
-                style = MaterialTheme.typography.titleLarge,
-                fontWeight = FontWeight.Bold
-            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "Laporan Biaya",
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold
+                )
+                IconButton(onClick = { generateLaporanBiayaPdf(context, filteredList) }) {
+                    Icon(imageVector = AppIcons.Pdf, contentDescription = "Export PDF", tint = MaterialTheme.colorScheme.primary)
+                }
+            }
             Spacer(modifier = Modifier.height(16.dp))
-
-            var selectedDateFilter by remember { mutableStateOf("Bulan Ini") }
-            val dates = listOf("Hari Ini", "Minggu Ini", "Bulan Ini", "Bulan Lalu", "Semua")
-
-            fun getCalendarForBiaya(tanggalStr: String): java.util.Calendar? {
-                return try {
-                    val sdf = java.text.SimpleDateFormat("d MMMM yyyy", java.util.Locale("in", "ID"))
-                    val date = sdf.parse(tanggalStr) ?: return null
-                    val cal = java.util.Calendar.getInstance()
-                    cal.time = date
-                    cal
-                } catch (e: Exception) {
-                    null
-                }
-            }
-
-            fun isBiayaMatchingFilter(tanggalStr: String, filter: String): Boolean {
-                val cal = getCalendarForBiaya(tanggalStr) ?: return false
-                val today = java.util.Calendar.getInstance()
-                return when (filter) {
-                    "Hari Ini" -> cal.get(java.util.Calendar.YEAR) == today.get(java.util.Calendar.YEAR) && cal.get(java.util.Calendar.DAY_OF_YEAR) == today.get(java.util.Calendar.DAY_OF_YEAR)
-                    "Minggu Ini" -> cal.get(java.util.Calendar.YEAR) == today.get(java.util.Calendar.YEAR) && cal.get(java.util.Calendar.WEEK_OF_YEAR) == today.get(java.util.Calendar.WEEK_OF_YEAR)
-                    "Bulan Ini" -> cal.get(java.util.Calendar.YEAR) == today.get(java.util.Calendar.YEAR) && cal.get(java.util.Calendar.MONTH) == today.get(java.util.Calendar.MONTH)
-                    "Bulan Lalu" -> {
-                        val lastMonth = java.util.Calendar.getInstance().apply { add(java.util.Calendar.MONTH, -1) }
-                        cal.get(java.util.Calendar.YEAR) == lastMonth.get(java.util.Calendar.YEAR) && cal.get(java.util.Calendar.MONTH) == lastMonth.get(java.util.Calendar.MONTH)
-                    }
-                    else -> true
-                }
-            }
 
             // Date filtering list chips
             LazyRow(
@@ -1526,9 +1542,7 @@ fun BiayaTabContent(
             Spacer(modifier = Modifier.height(24.dp))
 
             // Logic to calculate totals
-            val (bahanBakuList, opsList, dllList) = remember(biayaList.toList(), selectedDateFilter) {
-                val filteredList = if (selectedDateFilter == "Semua") biayaList else biayaList.filter { isBiayaMatchingFilter(it.tanggal, selectedDateFilter) }
-                
+            val (bahanBakuList, opsList, dllList) = remember(filteredList) {
                 val a = filteredList.filter { it.kategori == "Bahan Baku" }
                 val b = filteredList.filter { it.kategori in listOf("Listrik", "Gaji", "Air") || it.kategori == "Biaya Operasional" }
                 val c = filteredList.filter { it.kategori == "Lainnya" || (it.kategori != "Bahan Baku" && it.kategori !in listOf("Listrik", "Gaji", "Air", "Biaya Operasional")) }
@@ -1622,7 +1636,7 @@ fun BiayaTabContent(
                     } else {
                         opsList.forEachIndexed { index, b ->
                             Row(modifier = Modifier.fillMaxWidth().clickable { selectedItemForDetail = b }.padding(vertical = 4.dp), horizontalArrangement = Arrangement.SpaceBetween) {
-                                Text(text = "${index + 1}. ${b.keterangan} (${b.kategori})", style = MaterialTheme.typography.bodyMedium)
+                                Text(text = "${index + 1}. ${b.keterangan}", style = MaterialTheme.typography.bodyMedium)
                                 Text(text = formatRupiah(b.jumlah), style = MaterialTheme.typography.bodyMedium)
                             }
                         }
@@ -1681,11 +1695,18 @@ fun BiayaTabContent(
         }
 
         // ---------- ADD BIAYA MODAL ----------
-        if (showAddForm) {
-            var selectedKategori by remember { mutableStateOf("Bahan Baku") }
-            var keterangan by remember { mutableStateOf("") }
-            var jumlahStr by remember { mutableStateOf("") }
-            var selectedDate by remember { mutableStateOf(java.text.SimpleDateFormat("d MMMM yyyy", java.util.Locale("in", "ID")).format(java.util.Date())) }
+        if (showAddForm || itemToEdit != null) {
+            val isEdit = itemToEdit != null
+            var selectedKategori by remember(itemToEdit) { mutableStateOf(itemToEdit?.kategori ?: "Bahan Baku") }
+            var keterangan by remember(itemToEdit) { mutableStateOf(itemToEdit?.keterangan ?: "") }
+            var jumlahStr by remember(itemToEdit) {
+                mutableStateOf(itemToEdit?.jumlah?.let {
+                    if (it % 1.0 == 0.0) it.toLong().toString() else it.toString()
+                } ?: "")
+            }
+            var selectedDate by remember(itemToEdit) {
+                mutableStateOf(itemToEdit?.tanggal ?: java.text.SimpleDateFormat("d MMMM yyyy", java.util.Locale("in", "ID")).format(java.util.Date()))
+            }
 
             var keteranganError by remember { mutableStateOf(false) }
             var jumlahError by remember { mutableStateOf(false) }
@@ -1705,8 +1726,11 @@ fun BiayaTabContent(
             )
 
             AlertDialog(
-                onDismissRequest = { showAddForm = false },
-                title = { Text("Tambah Biaya Operasional") },
+                onDismissRequest = {
+                    showAddForm = false
+                    itemToEdit = null
+                },
+                title = { Text(if (isEdit) "Edit Biaya Operasional" else "Tambah Biaya Operasional") },
                 text = {
                     Column(
                         modifier = Modifier.fillMaxWidth(),
@@ -1800,24 +1824,40 @@ fun BiayaTabContent(
                                 return@Button
                             }
 
-                            biayaList.add(
-                                BiayaOperasional(
-                                    id = (biayaList.size + 1).toString(),
-                                    kategori = selectedKategori,
-                                    keterangan = keterangan,
-                                    jumlah = nominalVal,
-                                    tanggal = selectedDate,
-                                    pembuat = role
+                            if (isEdit) {
+                                val index = biayaList.indexOfFirst { it.id == itemToEdit!!.id }
+                                if (index != -1) {
+                                    biayaList[index] = itemToEdit!!.copy(
+                                        kategori = selectedKategori,
+                                        keterangan = keterangan,
+                                        jumlah = nominalVal,
+                                        tanggal = selectedDate
+                                    )
+                                }
+                                itemToEdit = null
+                            } else {
+                                biayaList.add(
+                                    BiayaOperasional(
+                                        id = (biayaList.size + 1).toString(),
+                                        kategori = selectedKategori,
+                                        keterangan = keterangan,
+                                        jumlah = nominalVal,
+                                        tanggal = selectedDate,
+                                        pembuat = role
+                                    )
                                 )
-                            )
-                            showAddForm = false
+                                showAddForm = false
+                            }
                         }
                     ) {
                         Text("SIMPAN")
                     }
                 },
                 dismissButton = {
-                    TextButton(onClick = { showAddForm = false }) {
+                    TextButton(onClick = {
+                        showAddForm = false
+                        itemToEdit = null
+                    }) {
                         Text("BATAL")
                     }
                 }
@@ -1896,7 +1936,15 @@ fun BiayaTabContent(
                     }
                 },
                 dismissButton = {
-                    if (role == UserRole.OWNER.displayName) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        TextButton(
+                            onClick = {
+                                selectedItemForDetail = null
+                                itemToEdit = item
+                            }
+                        ) {
+                            Text("Edit")
+                        }
                         TextButton(
                             onClick = {
                                 selectedItemForDetail = null
@@ -1924,6 +1972,7 @@ fun LabaRugiTabContent(
     onNavigateToMonthlyReport: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val context = androidx.compose.ui.platform.LocalContext.current
     var selectedLabaDateFilter by remember { mutableStateOf("Bulan Ini") }
     val labaDateFilters = listOf("Hari Ini", "Minggu Ini", "Bulan Ini", "Bulan Lalu", "Semua")
 
@@ -2144,12 +2193,20 @@ fun LabaRugiTabContent(
             }
         }
 
-        Text(
-            text = "Ringkasan Laba-Rugi",
-            style = MaterialTheme.typography.titleMedium,
-            fontWeight = FontWeight.Bold,
-            modifier = Modifier.padding(bottom = 12.dp)
-        )
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = "Ringkasan Laba-Rugi",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold
+            )
+            IconButton(onClick = { generateLabaRugiPdf(context, filteredTransactions, filteredBiaya, selectedLabaDateFilter) }) {
+                Icon(imageVector = AppIcons.Pdf, contentDescription = "Export PDF", tint = MaterialTheme.colorScheme.primary)
+            }
+        }
 
         // Date selection chips for Laba-Rugi
         LazyRow(
