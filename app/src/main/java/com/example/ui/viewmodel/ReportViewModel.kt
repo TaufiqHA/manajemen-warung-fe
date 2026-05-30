@@ -1,12 +1,14 @@
 package com.example.ui.viewmodel
 
-import androidx.lifecycle.ViewModel
+import android.app.Application
+import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.data.*
 import kotlinx.coroutines.flow.*
 import java.util.Calendar
 
-class ReportViewModel : ViewModel() {
+class ReportViewModel(application: Application) : AndroidViewModel(application) {
+    private val storageHelper = com.example.utils.LocalStorageHelper(application)
 
     // Filter yang dipilih user
     private val _selectedMonth = MutableStateFlow(Calendar.getInstance().get(Calendar.MONTH) + 1) 
@@ -16,16 +18,22 @@ class ReportViewModel : ViewModel() {
     val selectedItemId = _selectedItemId.asStateFlow()
 
     // Data semua barang untuk dropdown
-    val allItems = MutableStateFlow(listOf(
-        Item("1", "Indomie Goreng", 3000),
-        Item("2", "Kopi Kapal Api", 1500),
-        Item("3", "Beras 5kg", 65000),
-        Item("4", "Gula Pasir 1kg", 16000),
-        Item("5", "Telur Ayam 1kg", 28000)
-    )).asStateFlow()
+    private val _allItems = MutableStateFlow<List<Item>>(emptyList())
+    val allItems = _allItems.asStateFlow()
 
-    // Data semua transaksi (Mockup)
-    private val _allTransactions = MutableStateFlow<List<Transaction>>(generateMockTransactions())
+    // Data semua transaksi
+    private val _allTransactions = MutableStateFlow<List<Transaction>>(emptyList())
+
+    init {
+        loadData()
+    }
+
+    fun loadData() {
+        val menuItems = storageHelper.getMenuList()
+        _allItems.value = menuItems.map { Item(it.id, it.nama, it.harga.toLong()) }
+        
+        _allTransactions.value = storageHelper.getNestedTransactions()
+    }
 
     // Logika Inti: Filter berdasarkan bulan & item, lalu group berdasarkan tanggal
     val monthlyItemReport: StateFlow<List<DailyItemReport>> = combine(
@@ -66,33 +74,4 @@ class ReportViewModel : ViewModel() {
     // Fungsi untuk UI memperbarui filter
     fun setMonth(month: Int) { _selectedMonth.value = month }
     fun setItem(id: String) { _selectedItemId.value = id }
-
-    private fun generateMockTransactions(): List<Transaction> {
-        val transactions = mutableListOf<Transaction>()
-        val calendar = Calendar.getInstance()
-        val currentMonth = calendar.get(Calendar.MONTH)
-        
-        // Generate transactions for the last 30 days
-        for (i in 0 until 60) {
-            calendar.set(Calendar.DAY_OF_MONTH, (i % 28) + 1)
-            // Some in current month, some in previous
-            if (i > 30) calendar.set(Calendar.MONTH, currentMonth - 1)
-            
-            val items = listOf(
-                TransactionItem("1", "Indomie Goreng", (1..5).random(), 3000),
-                TransactionItem("2", "Kopi Kapal Api", (1..3).random(), 1500)
-            )
-            val total = items.sumOf { it.subTotal }
-            
-            transactions.add(
-                Transaction(
-                    kodeTransaksi = "TRX-MOCK-$i",
-                    tanggalTransaksi = calendar.timeInMillis,
-                    items = items,
-                    totalHarga = total
-                )
-            )
-        }
-        return transactions
-    }
 }

@@ -170,32 +170,39 @@ fun DashboardScreen(
     onNavigateToSettings: () -> Unit
 ) {
     var activeTab by remember { mutableStateOf(DashboardTab.Beranda) }
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val storageHelper = remember { com.example.utils.LocalStorageHelper(context) }
     
     // Live State Lists for local mockup persistence
     val menuList = remember {
-        mutableStateListOf(
-            MenuItem("1", "Mie Ayam Extra Pedas", 15000.0),
-            MenuItem("2", "Nasi Goreng Spesial", 18000.0),
-            MenuItem("3", "Es Teh Manis Jumbo", 4000.0),
-            MenuItem("4", "Ayam Bakar Madu", 22000.0)
-        )
+        mutableStateListOf<MenuItem>().apply {
+            addAll(storageHelper.getMenuList())
+        }
     }
 
     val transaksiList = remember {
-        mutableStateListOf(
-            TransaksiHarian("TRX-20260521-001", "1", "Mie Ayam Extra Pedas", 3, 15000.0, "08:30", "Admin Toko", "Pedas level 5"),
-            TransaksiHarian("TRX-20260521-001", "2", "Nasi Goreng Spesial", 2, 18000.0, "08:30", "Admin Toko", ""),
-            TransaksiHarian("TRX-20260521-002", "3", "Es Teh Manis Jumbo", 4, 4000.0, "11:00", "Admin Toko", "Es dikit"),
-            TransaksiHarian("TRX-20260521-002", "4", "Ayam Bakar Madu", 2, 22000.0, "11:00", "Admin Toko", "")
-        )
+        mutableStateListOf<TransaksiHarian>().apply {
+            addAll(storageHelper.getTransaksiList())
+        }
     }
 
     val biayaList = remember {
-        mutableStateListOf(
-            BiayaOperasional("1", "Bahan Baku", "Beli daging ayam & bumbu dapur", 350000.0, "21 Mei 2026", "Admin Toko"),
-            BiayaOperasional("2", "Listrik", "Tagihan listrik bulanan toko", 280000.0, "20 Mei 2026", "Owner"),
-            BiayaOperasional("3", "Air", "Pembayaran bulanan PAM", 120000.0, "18 Mei 2026", "Admin Toko")
-        )
+        mutableStateListOf<BiayaOperasional>().apply {
+            addAll(storageHelper.getBiayaList())
+        }
+    }
+
+    // Auto-save side effects when list content changes
+    LaunchedEffect(menuList.toList()) {
+        storageHelper.saveMenuList(menuList)
+    }
+
+    LaunchedEffect(transaksiList.toList()) {
+        storageHelper.saveTransaksiList(transaksiList)
+    }
+
+    LaunchedEffect(biayaList.toList()) {
+        storageHelper.saveBiayaList(biayaList)
     }
 
     // Role parameters
@@ -445,9 +452,50 @@ fun BerandaTabContent(
                 horizontalArrangement = Arrangement.SpaceEvenly,
                 verticalAlignment = Alignment.Bottom
             ) {
-                // Dummy Data for Chart
-                val chartData = listOf(0.4f, 0.6f, 0.3f, 0.8f, 0.5f, 0.9f, 0.7f)
+                // Dynamic Data for Chart from transaksiList
                 val labels = listOf("Sen", "Sel", "Rab", "Kam", "Jum", "Sab", "Min")
+                val counts = remember(transaksiList) {
+                    val arr = IntArray(7)
+                    val calendar = java.util.Calendar.getInstance()
+                    transaksiList.forEach { trx ->
+                        try {
+                            val dateStr = if (trx.idTransaksi.startsWith("TRX-") && trx.idTransaksi.length >= 12) {
+                                trx.idTransaksi.substring(4, 12)
+                            } else {
+                                ""
+                            }
+                            if (dateStr.isNotEmpty()) {
+                                val sdf = java.text.SimpleDateFormat("yyyyMMdd", java.util.Locale.getDefault())
+                                val date = sdf.parse(dateStr)
+                                if (date != null) {
+                                    calendar.time = date
+                                    val dayOfWeek = calendar.get(java.util.Calendar.DAY_OF_WEEK)
+                                    val index = when (dayOfWeek) {
+                                        java.util.Calendar.MONDAY -> 0
+                                        java.util.Calendar.TUESDAY -> 1
+                                        java.util.Calendar.WEDNESDAY -> 2
+                                        java.util.Calendar.THURSDAY -> 3
+                                        java.util.Calendar.FRIDAY -> 4
+                                        java.util.Calendar.SATURDAY -> 5
+                                        java.util.Calendar.SUNDAY -> 6
+                                        else -> 0
+                                    }
+                                    arr[index] += trx.jumlah
+                                }
+                            }
+                        } catch (e: Exception) {
+                            // ignore
+                        }
+                    }
+                    arr
+                }
+
+                val maxCount = remember(counts) { counts.maxOrNull() ?: 0 }
+                val chartData = remember(counts, maxCount) {
+                    counts.map { count ->
+                        if (maxCount > 0) count.toFloat() / maxCount else 0f
+                    }
+                }
                 
                 chartData.forEachIndexed { index, value ->
                     Column(
@@ -1417,7 +1465,7 @@ fun BiayaTabContent(
                                     kategori = selectedKategori,
                                     keterangan = keterangan,
                                     jumlah = nominalVal,
-                                    tanggal = "21 Mei 2026",
+                                    tanggal = java.text.SimpleDateFormat("d MMMM yyyy", java.util.Locale("in", "ID")).format(java.util.Date()),
                                     pembuat = role
                                 )
                             )
@@ -1538,68 +1586,111 @@ fun LabaRugiTabContent(
     var selectedLabaDateFilter by remember { mutableStateOf("Bulan Ini") }
     val labaDateFilters = listOf("Hari Ini", "7 Hari", "Bulan Ini", "Semua")
 
-    // Dynamic scale modifier based on filter to show different metrics dynamically
-    val multiplier = when (selectedLabaDateFilter) {
-        "Hari Ini" -> 0.1
-        "7 Hari" -> 0.4
-        "Bulan Ini" -> 1.0
-        else -> 2.5
+    val todaySdf = remember { java.text.SimpleDateFormat("yyyyMMdd", java.util.Locale.getDefault()) }
+    val todayStr = remember { todaySdf.format(java.util.Date()) }
+
+    fun getTrxDateStr(idTransaksi: String): String {
+        if (!idTransaksi.startsWith("TRX-") || idTransaksi.length < 12) {
+            return todayStr
+        }
+        return idTransaksi.substring(4, 12)
     }
 
-    val totalPemasukan = transaksiList.sumOf { it.jumlah * it.harga } * multiplier
-    val totalBiaya = biayaList.sumOf { it.jumlah } * multiplier
+    fun isTrxWithinDays(idTransaksi: String, days: Int): Boolean {
+        val dateStr = getTrxDateStr(idTransaksi)
+        return try {
+            val sdf = java.text.SimpleDateFormat("yyyyMMdd", java.util.Locale.getDefault())
+            val trxDate = sdf.parse(dateStr) ?: return false
+            val today = sdf.parse(todayStr) ?: return false
+            val diffMs = today.time - trxDate.time
+            val diffDays = diffMs / (1000 * 60 * 60 * 24)
+            diffDays in 0 until days
+        } catch (e: Exception) {
+            false
+        }
+    }
+
+    fun isBiayaWithinDays(tanggalStr: String, days: Int): Boolean {
+        return try {
+            val sdf = java.text.SimpleDateFormat("d MMMM yyyy", java.util.Locale("in", "ID"))
+            val biayaDate = sdf.parse(tanggalStr) ?: return false
+            val today = java.text.SimpleDateFormat("d MMMM yyyy", java.util.Locale("in", "ID")).parse(
+                java.text.SimpleDateFormat("d MMMM yyyy", java.util.Locale("in", "ID")).format(java.util.Date())
+            ) ?: return false
+            val diffMs = today.time - biayaDate.time
+            val diffDays = diffMs / (1000 * 60 * 60 * 24)
+            diffDays in 0 until days
+        } catch (e: Exception) {
+            false
+        }
+    }
+
+    val filteredTransactions = remember(transaksiList, selectedLabaDateFilter) {
+        when (selectedLabaDateFilter) {
+            "Hari Ini" -> transaksiList.filter { isTrxWithinDays(it.idTransaksi, 1) }
+            "7 Hari" -> transaksiList.filter { isTrxWithinDays(it.idTransaksi, 7) }
+            "Bulan Ini" -> transaksiList.filter { isTrxWithinDays(it.idTransaksi, 30) }
+            else -> transaksiList
+        }
+    }
+
+    val filteredBiaya = remember(biayaList, selectedLabaDateFilter) {
+        when (selectedLabaDateFilter) {
+            "Hari Ini" -> biayaList.filter { isBiayaWithinDays(it.tanggal, 1) }
+            "7 Hari" -> biayaList.filter { isBiayaWithinDays(it.tanggal, 7) }
+            "Bulan Ini" -> biayaList.filter { isBiayaWithinDays(it.tanggal, 30) }
+            else -> biayaList
+        }
+    }
+
+    val totalPemasukan = filteredTransactions.sumOf { it.jumlah * it.harga }
+    val totalBiaya = filteredBiaya.sumOf { it.jumlah }
     val labaBersih = totalPemasukan - totalBiaya
 
-    val rincianList = when (selectedLabaDateFilter) {
-        "Hari Ini" -> listOf(
-            RincianHarian("Kamis, 29 Mei 2026", 4, 141000)
-        )
-        "7 Hari" -> listOf(
-            RincianHarian("Kamis, 29 Mei 2026", 4, 141000),
-            RincianHarian("Rabu, 28 Mei 2026", 2, 85000),
-            RincianHarian("Selasa, 27 Mei 2026", 6, 230000)
-        )
-        "Bulan Ini" -> listOf(
-            RincianHarian("Kamis, 29 Mei 2026", 4, 141000),
-            RincianHarian("Rabu, 28 Mei 2026", 2, 85000),
-            RincianHarian("Selasa, 27 Mei 2026", 6, 230000),
-            RincianHarian("Senin, 26 Mei 2026", 3, 115000),
-            RincianHarian("Minggu, 25 Mei 2026", 5, 195000)
-        )
-        else -> listOf(
-            RincianHarian("Kamis, 29 Mei 2026", 4, 141000),
-            RincianHarian("Rabu, 28 Mei 2026", 2, 85000),
-            RincianHarian("Selasa, 27 Mei 2026", 6, 230000),
-            RincianHarian("Senin, 26 Mei 2026", 3, 115000),
-            RincianHarian("Minggu, 25 Mei 2026", 5, 195000),
-            RincianHarian("Sabtu, 24 Mei 2026", 8, 310000),
-            RincianHarian("Jumat, 23 Mei 2026", 4, 160000)
-        )
+    fun formatReadableDate(dateStr: String): String {
+        return try {
+            val fromSdf = java.text.SimpleDateFormat("yyyyMMdd", java.util.Locale.getDefault())
+            val date = fromSdf.parse(dateStr) ?: return dateStr
+            val toSdf = java.text.SimpleDateFormat("EEEE, d MMMM yyyy", java.util.Locale("in", "ID"))
+            toSdf.format(date)
+        } catch (e: Exception) {
+            dateStr
+        }
     }
 
-    val menuTerlarisList = when (selectedLabaDateFilter) {
-        "Hari Ini" -> listOf(
-            MenuTerlaris("Mie Ayam Extra Pedas", 5, 75000, 1),
-            MenuTerlaris("Es Teh Manis Jumbo", 3, 12000, 2)
-        )
-        "7 Hari" -> listOf(
-            MenuTerlaris("Mie Ayam Extra Pedas", 12, 180000, 1),
-            MenuTerlaris("Nasi Goreng Spesial", 10, 180000, 2),
-            MenuTerlaris("Ayam Bakar Madu", 6, 132000, 3),
-            MenuTerlaris("Es Teh Manis Jumbo", 4, 16000, 4)
-        )
-        "Bulan Ini" -> listOf(
-            MenuTerlaris("Mie Ayam Extra Pedas", 15, 225000, 1),
-            MenuTerlaris("Nasi Goreng Spesial", 12, 216000, 2),
-            MenuTerlaris("Ayam Bakar Madu", 8, 176000, 3),
-            MenuTerlaris("Es Teh Manis Jumbo", 5, 20000, 4)
-        )
-        else -> listOf(
-            MenuTerlaris("Mie Ayam Extra Pedas", 45, 675000, 1),
-            MenuTerlaris("Nasi Goreng Spesial", 38, 684000, 2),
-            MenuTerlaris("Ayam Bakar Madu", 24, 528000, 3),
-            MenuTerlaris("Es Teh Manis Jumbo", 20, 80000, 4)
-        )
+    val rincianList = remember(filteredTransactions) {
+        filteredTransactions.groupBy { getTrxDateStr(it.idTransaksi) }
+            .map { (dateStr, items) ->
+                val readableDate = formatReadableDate(dateStr)
+                val uniqueTrxCount = items.distinctBy { it.idTransaksi }.size
+                val totalRevenue = items.sumOf { it.jumlah * it.harga }.toLong()
+                dateStr to RincianHarian(
+                    tanggal = readableDate,
+                    jumlahOrder = uniqueTrxCount,
+                    totalPenjualan = totalRevenue
+                )
+            }
+            .sortedByDescending { it.first }
+            .map { it.second }
+    }
+
+    val menuTerlarisList = remember(filteredTransactions) {
+        filteredTransactions.groupBy { it.namaItem }
+            .map { (namaItem, items) ->
+                val totalQty = items.sumOf { it.jumlah }
+                val totalRevenue = items.sumOf { it.jumlah * it.harga }
+                namaItem to Pair(totalQty, totalRevenue)
+            }
+            .sortedByDescending { it.second.first }
+            .take(5)
+            .mapIndexed { index, pair ->
+                MenuTerlaris(
+                    namaBarang = pair.first,
+                    totalQty = pair.second.first,
+                    totalPendapatan = pair.second.second.toLong(),
+                    ranking = index + 1
+                )
+            }
     }
 
     Column(

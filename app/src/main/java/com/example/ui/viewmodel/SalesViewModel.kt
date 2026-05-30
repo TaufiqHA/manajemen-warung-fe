@@ -22,6 +22,7 @@ import java.util.*
 
 class SalesViewModel(application: Application) : AndroidViewModel(application) {
     private val userPrefs = UserPreferences(application)
+    private val storageHelper = com.example.utils.LocalStorageHelper(application)
 
     val namaWarungState = userPrefs.namaWarung.stateIn(
         scope = viewModelScope,
@@ -39,18 +40,16 @@ class SalesViewModel(application: Application) : AndroidViewModel(application) {
     val cartItems: List<TransactionItem> = _cartItems
 
     // --- Autocomplete State ---
-    private val _allItems = MutableStateFlow<List<Item>>(listOf(
-        Item("1", "Indomie Goreng", 3000),
-        Item("2", "Kopi Kapal Api", 1500),
-        Item("3", "Beras 5kg", 65000),
-        Item("4", "Gula Pasir 1kg", 16000),
-        Item("5", "Telur Ayam 1kg", 28000),
-        Item("6", "Minyak Goreng 2L", 35000),
-        Item("7", "Teh Pucuk", 3500),
-        Item("8", "Aqua 600ml", 3000),
-        Item("9", "Roti Tawar", 15000),
-        Item("10", "Susu Kental Manis", 12000)
-    )) 
+    private val _allItems = MutableStateFlow<List<Item>>(emptyList()) 
+
+    init {
+        loadItems()
+    }
+
+    fun loadItems() {
+        val menuItems = storageHelper.getMenuList()
+        _allItems.value = menuItems.map { Item(it.id, it.nama, it.harga.toLong()) }
+    }
    
     private val _searchQuery = MutableStateFlow("")
     val searchQuery = _searchQuery.asStateFlow()
@@ -121,7 +120,8 @@ class SalesViewModel(application: Application) : AndroidViewModel(application) {
             diskonNominal = diskonNominal,
             totalSetelahDiskon = totalSetelahDiskon
         )
-        // In a real app, we would save this to a database
+        // Simpan transaksi secara lokal ke SharedPreferences
+        storageHelper.addTransaction(transaction)
         return transaction
     }
 
