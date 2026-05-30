@@ -42,8 +42,8 @@ fun AutocompleteItemDropdown(
     ) {
         OutlinedTextField(
             value = query,
-            onValueChange = { },
-            readOnly = true,
+            onValueChange = { onQueryChanged(it) },
+            readOnly = false,
             singleLine = true,
             label = { Text("Nama Barang") },
             modifier = Modifier.menuAnchor().fillMaxWidth(),

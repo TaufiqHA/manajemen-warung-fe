@@ -84,11 +84,14 @@ class SalesViewModel(application: Application) : AndroidViewModel(application) {
     val totalHarga: Long
         get() = _cartItems.sumOf { it.subTotal }
 
-    fun addToCart(nama: String, qty: Int, harga: Long) {
-        val item = _allItems.value.find { it.name == nama && it.price == harga }
+    fun addToCart(nama: String, qty: Int, harga: Long, diskon: Long = 0L) {
+        val item = _allItems.value.find { it.name == nama }
         val itemId = item?.id ?: "TEMP-${nama.hashCode()}"
 
-        val existingItemIndex = _cartItems.indexOfFirst { it.itemId == itemId && it.harga == harga }
+        val displayNama = if (diskon > 0) "$nama (Diskon: ${com.example.utils.formatRupiah(diskon)})" else nama
+        val finalHarga = (harga - diskon).coerceAtLeast(0L)
+
+        val existingItemIndex = _cartItems.indexOfFirst { it.itemId == itemId && it.harga == finalHarga && it.namaBarang == displayNama }
         if (existingItemIndex != -1) {
             val existingItem = _cartItems[existingItemIndex]
             val updatedItem = existingItem.copy(
@@ -97,7 +100,7 @@ class SalesViewModel(application: Application) : AndroidViewModel(application) {
             )
             _cartItems[existingItemIndex] = updatedItem
         } else {
-            _cartItems.add(TransactionItem(itemId, nama, qty, harga))
+            _cartItems.add(TransactionItem(itemId, displayNama, qty, finalHarga))
         }
     }
 
@@ -109,7 +112,7 @@ class SalesViewModel(application: Application) : AndroidViewModel(application) {
         _cartItems.clear()
     }
 
-    fun processTransaction(diskonPersen: Double = 0.0, diskonNominal: Long = 0L, totalSetelahDiskon: Long = totalHarga): Transaction {
+    fun processTransaction(diskonPersen: Double = 0.0, diskonNominal: Long = 0L, totalSetelahDiskon: Long = totalHarga, paymentMethod: String = "Cash"): Transaction {
         val kode = "TRX-${SimpleDateFormat("yyyyMMdd-HHmmss", Locale.getDefault()).format(Date())}"
         val transaction = Transaction(
             kodeTransaksi = kode,
@@ -120,8 +123,8 @@ class SalesViewModel(application: Application) : AndroidViewModel(application) {
             diskonNominal = diskonNominal,
             totalSetelahDiskon = totalSetelahDiskon
         )
-        // Simpan transaksi secara lokal ke SharedPreferences
-        storageHelper.addTransaction(transaction)
+        // Simpan transaksi secara lokal ke SharedPreferences dengan metode pembayaran
+        storageHelper.addTransaction(transaction, paymentMethod)
         return transaction
     }
 

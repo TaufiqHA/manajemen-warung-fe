@@ -110,7 +110,7 @@ class LocalStorageHelper(context: Context) {
         prefs.edit().putString("nested_transaction_history", json).apply()
     }
 
-    fun addTransaction(transaction: Transaction) {
+    fun addTransaction(transaction: Transaction, paymentMethod: String = "Cash") {
         // 1. Add to nested transactions
         val currentNested = getNestedTransactions().toMutableList()
         currentNested.add(transaction)
@@ -131,7 +131,7 @@ class LocalStorageHelper(context: Context) {
                     harga = item.harga.toDouble(),
                     waktu = timeStr,
                     dicatatOleh = "Admin Toko",
-                    catatan = ""
+                    catatan = "Via: $paymentMethod"
                 )
             )
         }

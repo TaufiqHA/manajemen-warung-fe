@@ -2,6 +2,8 @@ package com.example.ui.screens
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -52,6 +54,7 @@ fun SalesScreen(
 
     var qty by remember { mutableStateOf("1") }
     var harga by remember { mutableStateOf("") }
+    var diskonItem by remember { mutableStateOf("") }
     
     var showReceiptDialog by remember { mutableStateOf(false) }
     var receiptText by remember { mutableStateOf("") }
@@ -60,6 +63,7 @@ fun SalesScreen(
     var isDiscountPercent by remember { mutableStateOf(true) } // true = %, false = Rp
     var discountInput by remember { mutableStateOf("") }
     var discountError by remember { mutableStateOf<String?>(null) }
+    var paymentMethod by remember { mutableStateOf("Cash") }
 
     val subtotal = viewModel.totalHarga
     val discountValue = discountInput.toDoubleOrNull() ?: 0.0
@@ -168,9 +172,16 @@ fun SalesScreen(
                         OutlinedTextField(
                             value = harga,
                             onValueChange = { harga = it },
-                            label = { Text("Harga Satuan") },
+                            label = { Text("Harga") },
                             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                            modifier = Modifier.weight(2f)
+                            modifier = Modifier.weight(1f)
+                        )
+                        OutlinedTextField(
+                            value = diskonItem,
+                            onValueChange = { diskonItem = it },
+                            label = { Text("Diskon") },
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                            modifier = Modifier.weight(1f)
                         )
                     }
                     
@@ -178,12 +189,14 @@ fun SalesScreen(
                         onClick = {
                             val q = qty.toIntOrNull() ?: 0
                             val h = harga.toLongOrNull() ?: 0L
+                            val d = diskonItem.toLongOrNull() ?: 0L
                             if (searchQuery.isNotBlank() && q > 0 && h > 0) {
-                                viewModel.addToCart(searchQuery, q, h)
+                                viewModel.addToCart(searchQuery, q, h, d)
                                 // Reset fields
                                 viewModel.onSearchQueryChanged("")
                                 qty = "1"
                                 harga = ""
+                                diskonItem = ""
                             }
                         },
                         modifier = Modifier.fillMaxWidth()
@@ -308,6 +321,23 @@ fun SalesScreen(
                 )
             }
             
+            Spacer(modifier = Modifier.height(12.dp))
+
+            Row(
+                modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Text("Pembayaran:", style = MaterialTheme.typography.bodyMedium, color = Color.Gray)
+                listOf("Cash", "QRIS", "Transfer").forEach { method ->
+                    FilterChip(
+                        selected = paymentMethod == method,
+                        onClick = { paymentMethod = method },
+                        label = { Text(method) }
+                    )
+                }
+            }
+            
             Spacer(modifier = Modifier.height(16.dp))
             
             Button(
@@ -316,7 +346,8 @@ fun SalesScreen(
                         val transaction = viewModel.processTransaction(
                             diskonPersen = if (isDiscountPercent) discountValue else 0.0,
                             diskonNominal = nominalDiskon,
-                            totalSetelahDiskon = totalAkhir
+                            totalSetelahDiskon = totalAkhir,
+                            paymentMethod = paymentMethod
                         )
                         currentTransaction = transaction
                         receiptText = viewModel.formatReceipt(transaction)
@@ -342,6 +373,7 @@ fun SalesScreen(
                 showReceiptDialog = false
                 viewModel.clearCart()
                 discountInput = ""
+                paymentMethod = "Cash"
             },
             title = { Text("Struk Penjualan") },
             text = {

@@ -1151,8 +1151,43 @@ fun PenjualanTabContent(
                     }
                 },
                 confirmButton = {
-                    TextButton(onClick = { selectedItemForDetail = null }) {
-                        Text("Tutup")
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        TextButton(
+                            onClick = {
+                                coroutineScope.launch {
+                                    snackbarHostState.showSnackbar("Mencetak ulang struk ${item.idTransaksi}...")
+                                }
+                                selectedItemForDetail = null
+                            }
+                        ) {
+                            Text("Cetak Ulang")
+                        }
+                        TextButton(onClick = { selectedItemForDetail = null }) {
+                            Text("Tutup")
+                        }
+                    }
+                },
+                dismissButton = {
+                    if (!item.namaItem.startsWith("❌")) {
+                        TextButton(
+                            onClick = {
+                                val index = transaksiList.indexOfFirst { it.id == item.id }
+                                if (index != -1) {
+                                    transaksiList[index] = item.copy(
+                                        namaItem = "❌ [BATAL] ${item.namaItem}",
+                                        harga = 0.0
+                                    )
+                                }
+                                coroutineScope.launch {
+                                    snackbarHostState.showSnackbar("Transaksi ${item.idTransaksi} berhasil dibatalkan")
+                                }
+                                selectedItemForDetail = null
+                            }
+                        ) {
+                            Text("Batalkan", color = DangerColor)
+                        }
                     }
                 }
             )
@@ -1169,6 +1204,7 @@ fun BiayaTabContent(
     snackbarHostState: SnackbarHostState,
     modifier: Modifier = Modifier
 ) {
+    val context = androidx.compose.ui.platform.LocalContext.current
     var showAddForm by remember { mutableStateOf(false) }
     var itemToDelete by remember { mutableStateOf<BiayaOperasional?>(null) }
     var selectedItemForDetail by remember { mutableStateOf<BiayaOperasional?>(null) }
@@ -1191,7 +1227,34 @@ fun BiayaTabContent(
             Spacer(modifier = Modifier.height(16.dp))
 
             var selectedDateFilter by remember { mutableStateOf("Bulan Ini") }
-            val dates = listOf("Hari Ini", "Bulan Ini", "Semua")
+            val dates = listOf("Hari Ini", "Minggu Ini", "Bulan Ini", "Bulan Lalu", "Semua")
+
+            fun getCalendarForBiaya(tanggalStr: String): java.util.Calendar? {
+                return try {
+                    val sdf = java.text.SimpleDateFormat("d MMMM yyyy", java.util.Locale("in", "ID"))
+                    val date = sdf.parse(tanggalStr) ?: return null
+                    val cal = java.util.Calendar.getInstance()
+                    cal.time = date
+                    cal
+                } catch (e: Exception) {
+                    null
+                }
+            }
+
+            fun isBiayaMatchingFilter(tanggalStr: String, filter: String): Boolean {
+                val cal = getCalendarForBiaya(tanggalStr) ?: return false
+                val today = java.util.Calendar.getInstance()
+                return when (filter) {
+                    "Hari Ini" -> cal.get(java.util.Calendar.YEAR) == today.get(java.util.Calendar.YEAR) && cal.get(java.util.Calendar.DAY_OF_YEAR) == today.get(java.util.Calendar.DAY_OF_YEAR)
+                    "Minggu Ini" -> cal.get(java.util.Calendar.YEAR) == today.get(java.util.Calendar.YEAR) && cal.get(java.util.Calendar.WEEK_OF_YEAR) == today.get(java.util.Calendar.WEEK_OF_YEAR)
+                    "Bulan Ini" -> cal.get(java.util.Calendar.YEAR) == today.get(java.util.Calendar.YEAR) && cal.get(java.util.Calendar.MONTH) == today.get(java.util.Calendar.MONTH)
+                    "Bulan Lalu" -> {
+                        val lastMonth = java.util.Calendar.getInstance().apply { add(java.util.Calendar.MONTH, -1) }
+                        cal.get(java.util.Calendar.YEAR) == lastMonth.get(java.util.Calendar.YEAR) && cal.get(java.util.Calendar.MONTH) == lastMonth.get(java.util.Calendar.MONTH)
+                    }
+                    else -> true
+                }
+            }
 
             // Date filtering list chips
             LazyRow(
@@ -1215,10 +1278,11 @@ fun BiayaTabContent(
 
             // Logic to calculate totals
             val (bahanBakuList, opsList, dllList) = remember(biayaList, selectedDateFilter) {
-                // In a real app we would filter exactly by dates, for UI we just group them.
-                val a = biayaList.filter { it.kategori == "Bahan Baku" }
-                val b = biayaList.filter { it.kategori in listOf("Listrik", "Gaji", "Air") || it.kategori == "Biaya Operasional" }
-                val c = biayaList.filter { it.kategori == "Lainnya" || (it.kategori != "Bahan Baku" && it.kategori !in listOf("Listrik", "Gaji", "Air", "Biaya Operasional")) }
+                val filteredList = if (selectedDateFilter == "Semua") biayaList else biayaList.filter { isBiayaMatchingFilter(it.tanggal, selectedDateFilter) }
+                
+                val a = filteredList.filter { it.kategori == "Bahan Baku" }
+                val b = filteredList.filter { it.kategori in listOf("Listrik", "Gaji", "Air") || it.kategori == "Biaya Operasional" }
+                val c = filteredList.filter { it.kategori == "Lainnya" || (it.kategori != "Bahan Baku" && it.kategori !in listOf("Listrik", "Gaji", "Air", "Biaya Operasional")) }
                 Triple(a, b, c)
             }
 
@@ -1372,11 +1436,24 @@ fun BiayaTabContent(
             var selectedKategori by remember { mutableStateOf("Bahan Baku") }
             var keterangan by remember { mutableStateOf("") }
             var jumlahStr by remember { mutableStateOf("") }
+            var selectedDate by remember { mutableStateOf(java.text.SimpleDateFormat("d MMMM yyyy", java.util.Locale("in", "ID")).format(java.util.Date())) }
 
             var keteranganError by remember { mutableStateOf(false) }
             var jumlahError by remember { mutableStateOf(false) }
 
             var expandedDropdown by remember { mutableStateOf(false) }
+
+            val calendar = java.util.Calendar.getInstance()
+            val datePickerDialog = android.app.DatePickerDialog(
+                context,
+                { _, year, month, dayOfMonth ->
+                    calendar.set(year, month, dayOfMonth)
+                    selectedDate = java.text.SimpleDateFormat("d MMMM yyyy", java.util.Locale("in", "ID")).format(calendar.time)
+                },
+                calendar.get(java.util.Calendar.YEAR),
+                calendar.get(java.util.Calendar.MONTH),
+                calendar.get(java.util.Calendar.DAY_OF_MONTH)
+            )
 
             AlertDialog(
                 onDismissRequest = { showAddForm = false },
@@ -1386,6 +1463,19 @@ fun BiayaTabContent(
                         modifier = Modifier.fillMaxWidth(),
                         verticalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
+                        // Tanggal Field
+                        Text("Tanggal *", style = MaterialTheme.typography.labelLarge)
+                        Box {
+                            OutlinedTextField(
+                                value = selectedDate,
+                                onValueChange = {},
+                                readOnly = true,
+                                modifier = Modifier.fillMaxWidth(),
+                                trailingIcon = { Icon(AppIcons.Calendar, contentDescription = null) }
+                            )
+                            Box(modifier = Modifier.matchParentSize().clickable { datePickerDialog.show() }.background(Color.Transparent))
+                        }
+
                         // Custom dropdown choice represent for kategori
                         Text("Kategori *", style = MaterialTheme.typography.labelLarge)
                         Box {
@@ -1393,9 +1483,11 @@ fun BiayaTabContent(
                                 value = selectedKategori,
                                 onValueChange = {},
                                 readOnly = true,
-                                modifier = Modifier.fillMaxWidth().clickable { expandedDropdown = true },
+                                modifier = Modifier.fillMaxWidth(),
                                 trailingIcon = { Icon(AppIcons.ArrowDropDown, contentDescription = null) }
                             )
+                            Box(modifier = Modifier.matchParentSize().clickable { expandedDropdown = true }.background(Color.Transparent))
+                            
                             DropdownMenu(
                                 expanded = expandedDropdown,
                                 onDismissRequest = { expandedDropdown = false }
@@ -1465,7 +1557,7 @@ fun BiayaTabContent(
                                     kategori = selectedKategori,
                                     keterangan = keterangan,
                                     jumlah = nominalVal,
-                                    tanggal = java.text.SimpleDateFormat("d MMMM yyyy", java.util.Locale("in", "ID")).format(java.util.Date()),
+                                    tanggal = selectedDate,
                                     pembuat = role
                                 )
                             )
@@ -1584,7 +1676,7 @@ fun LabaRugiTabContent(
     modifier: Modifier = Modifier
 ) {
     var selectedLabaDateFilter by remember { mutableStateOf("Bulan Ini") }
-    val labaDateFilters = listOf("Hari Ini", "7 Hari", "Bulan Ini", "Semua")
+    val labaDateFilters = listOf("Hari Ini", "Minggu Ini", "Bulan Ini", "Bulan Lalu", "Semua")
 
     val todaySdf = remember { java.text.SimpleDateFormat("yyyyMMdd", java.util.Locale.getDefault()) }
     val todayStr = remember { todaySdf.format(java.util.Date()) }
@@ -1596,50 +1688,96 @@ fun LabaRugiTabContent(
         return idTransaksi.substring(4, 12)
     }
 
-    fun isTrxWithinDays(idTransaksi: String, days: Int): Boolean {
+    fun getCalendarForTrx(idTransaksi: String): java.util.Calendar? {
         val dateStr = getTrxDateStr(idTransaksi)
         return try {
             val sdf = java.text.SimpleDateFormat("yyyyMMdd", java.util.Locale.getDefault())
-            val trxDate = sdf.parse(dateStr) ?: return false
-            val today = sdf.parse(todayStr) ?: return false
-            val diffMs = today.time - trxDate.time
-            val diffDays = diffMs / (1000 * 60 * 60 * 24)
-            diffDays in 0 until days
+            val date = sdf.parse(dateStr) ?: return null
+            val cal = java.util.Calendar.getInstance()
+            cal.time = date
+            cal
         } catch (e: Exception) {
-            false
+            null
         }
     }
 
-    fun isBiayaWithinDays(tanggalStr: String, days: Int): Boolean {
+    fun getCalendarForBiaya(tanggalStr: String): java.util.Calendar? {
         return try {
             val sdf = java.text.SimpleDateFormat("d MMMM yyyy", java.util.Locale("in", "ID"))
-            val biayaDate = sdf.parse(tanggalStr) ?: return false
-            val today = java.text.SimpleDateFormat("d MMMM yyyy", java.util.Locale("in", "ID")).parse(
-                java.text.SimpleDateFormat("d MMMM yyyy", java.util.Locale("in", "ID")).format(java.util.Date())
-            ) ?: return false
-            val diffMs = today.time - biayaDate.time
-            val diffDays = diffMs / (1000 * 60 * 60 * 24)
-            diffDays in 0 until days
+            val date = sdf.parse(tanggalStr) ?: return null
+            val cal = java.util.Calendar.getInstance()
+            cal.time = date
+            cal
         } catch (e: Exception) {
-            false
+            null
+        }
+    }
+
+    fun isTrxMatchingFilter(idTransaksi: String, filter: String): Boolean {
+        val cal = getCalendarForTrx(idTransaksi) ?: return false
+        val today = java.util.Calendar.getInstance()
+        return when (filter) {
+            "Hari Ini" -> {
+                cal.get(java.util.Calendar.YEAR) == today.get(java.util.Calendar.YEAR) &&
+                cal.get(java.util.Calendar.MONTH) == today.get(java.util.Calendar.MONTH) &&
+                cal.get(java.util.Calendar.DAY_OF_MONTH) == today.get(java.util.Calendar.DAY_OF_MONTH)
+            }
+            "Minggu Ini" -> {
+                cal.get(java.util.Calendar.YEAR) == today.get(java.util.Calendar.YEAR) &&
+                cal.get(java.util.Calendar.WEEK_OF_YEAR) == today.get(java.util.Calendar.WEEK_OF_YEAR)
+            }
+            "Bulan Ini" -> {
+                cal.get(java.util.Calendar.YEAR) == today.get(java.util.Calendar.YEAR) &&
+                cal.get(java.util.Calendar.MONTH) == today.get(java.util.Calendar.MONTH)
+            }
+            "Bulan Lalu" -> {
+                val lastMonth = java.util.Calendar.getInstance().apply { add(java.util.Calendar.MONTH, -1) }
+                cal.get(java.util.Calendar.YEAR) == lastMonth.get(java.util.Calendar.YEAR) &&
+                cal.get(java.util.Calendar.MONTH) == lastMonth.get(java.util.Calendar.MONTH)
+            }
+            else -> true
+        }
+    }
+
+    fun isBiayaMatchingFilter(tanggalStr: String, filter: String): Boolean {
+        val cal = getCalendarForBiaya(tanggalStr) ?: return false
+        val today = java.util.Calendar.getInstance()
+        return when (filter) {
+            "Hari Ini" -> {
+                cal.get(java.util.Calendar.YEAR) == today.get(java.util.Calendar.YEAR) &&
+                cal.get(java.util.Calendar.MONTH) == today.get(java.util.Calendar.MONTH) &&
+                cal.get(java.util.Calendar.DAY_OF_MONTH) == today.get(java.util.Calendar.DAY_OF_MONTH)
+            }
+            "Minggu Ini" -> {
+                cal.get(java.util.Calendar.YEAR) == today.get(java.util.Calendar.YEAR) &&
+                cal.get(java.util.Calendar.WEEK_OF_YEAR) == today.get(java.util.Calendar.WEEK_OF_YEAR)
+            }
+            "Bulan Ini" -> {
+                cal.get(java.util.Calendar.YEAR) == today.get(java.util.Calendar.YEAR) &&
+                cal.get(java.util.Calendar.MONTH) == today.get(java.util.Calendar.MONTH)
+            }
+            "Bulan Lalu" -> {
+                val lastMonth = java.util.Calendar.getInstance().apply { add(java.util.Calendar.MONTH, -1) }
+                cal.get(java.util.Calendar.YEAR) == lastMonth.get(java.util.Calendar.YEAR) &&
+                cal.get(java.util.Calendar.MONTH) == lastMonth.get(java.util.Calendar.MONTH)
+            }
+            else -> true
         }
     }
 
     val filteredTransactions = remember(transaksiList, selectedLabaDateFilter) {
-        when (selectedLabaDateFilter) {
-            "Hari Ini" -> transaksiList.filter { isTrxWithinDays(it.idTransaksi, 1) }
-            "7 Hari" -> transaksiList.filter { isTrxWithinDays(it.idTransaksi, 7) }
-            "Bulan Ini" -> transaksiList.filter { isTrxWithinDays(it.idTransaksi, 30) }
-            else -> transaksiList
+        if (selectedLabaDateFilter == "Semua") {
+            transaksiList
+        } else {
+            transaksiList.filter { isTrxMatchingFilter(it.idTransaksi, selectedLabaDateFilter) }
         }
     }
 
     val filteredBiaya = remember(biayaList, selectedLabaDateFilter) {
-        when (selectedLabaDateFilter) {
-            "Hari Ini" -> biayaList.filter { isBiayaWithinDays(it.tanggal, 1) }
-            "7 Hari" -> biayaList.filter { isBiayaWithinDays(it.tanggal, 7) }
-            "Bulan Ini" -> biayaList.filter { isBiayaWithinDays(it.tanggal, 30) }
-            else -> biayaList
+        if (selectedLabaDateFilter == "Semua") {
+            biayaList
+        } else {
+            biayaList.filter { isBiayaMatchingFilter(it.tanggal, selectedLabaDateFilter) }
         }
     }
 
@@ -1878,7 +2016,7 @@ fun LabaRugiTabContent(
         Spacer(modifier = Modifier.height(16.dp))
 
         Text(
-            text = "🏆 Menu Terlaris",
+            text = "🏆 Menu Terlaris ($selectedLabaDateFilter)",
             style = MaterialTheme.typography.titleMedium,
             fontWeight = FontWeight.Bold,
             modifier = Modifier.padding(bottom = 12.dp)
