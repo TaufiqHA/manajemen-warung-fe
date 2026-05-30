@@ -161,7 +161,10 @@ fun SalesScreen(
                         modifier = Modifier.fillMaxWidth()
                     )
                     
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
                         OutlinedTextField(
                             value = qty,
                             onValueChange = { qty = it },
@@ -176,20 +179,40 @@ fun SalesScreen(
                             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                             modifier = Modifier.weight(1f)
                         )
-                        OutlinedTextField(
-                            value = diskonItem,
-                            onValueChange = { diskonItem = it },
-                            label = { Text("Diskon") },
-                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                            modifier = Modifier.weight(1f)
-                        )
+                        
+                        val itemPrice = harga.toLongOrNull() ?: 0L
+                        val itemDiscountPercent = diskonItem.toDoubleOrNull() ?: 0.0
+                        val itemDiscountNominal = (itemPrice * (itemDiscountPercent / 100.0)).toLong()
+
+                        Row(
+                            modifier = Modifier.weight(1.5f),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            OutlinedTextField(
+                                value = diskonItem,
+                                onValueChange = { diskonItem = it },
+                                label = { Text("Diskon (%)") },
+                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                                modifier = Modifier.weight(1f)
+                            )
+                            if (itemDiscountNominal > 0) {
+                                Text(
+                                    text = formatRupiah(itemDiscountNominal),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.primary
+                                )
+                            }
+                        }
                     }
                     
                     Button(
                         onClick = {
                             val q = qty.toIntOrNull() ?: 0
                             val h = harga.toLongOrNull() ?: 0L
-                            val d = diskonItem.toLongOrNull() ?: 0L
+                            val itemDiscountPercent = diskonItem.toDoubleOrNull() ?: 0.0
+                            val d = (h * (itemDiscountPercent / 100.0)).toLong()
                             if (searchQuery.isNotBlank() && q > 0 && h > 0) {
                                 viewModel.addToCart(searchQuery, q, h, d)
                                 // Reset fields

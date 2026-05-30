@@ -36,6 +36,22 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
+import androidx.lifecycle.viewmodel.compose.viewModel
+import com.example.ui.viewmodel.SalesViewModel
+import android.bluetooth.BluetoothAdapter
+import android.bluetooth.BluetoothDevice
+import android.content.Context
+import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.ui.text.font.FontFamily
+import com.example.utils.generateQuotationPdf
+import com.example.data.InvoiceItem
+import com.example.data.TransactionModel
+import com.example.data.Transaction
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 // Enumeration for Bottom Navigation Tabs
 enum class DashboardTab(val label: String) {
@@ -330,6 +346,17 @@ fun BerandaTabContent(
 
     val totalPenjualanHarian = transaksiList.sumOf { it.jumlah * it.harga }
 
+    // Kelompokkan berdasarkan idTransaksi untuk mendapatkan jumlah struk riil
+    val groupedTransactions = transaksiList.groupBy { it.idTransaksi }
+
+    // Hitung transaksi yang batal (jika ada item di struk tersebut yang berawalan ❌)
+    val canceledTransactionsCount = groupedTransactions.count { (_, items) -> 
+        items.any { it.namaItem.startsWith("❌") } 
+    }
+
+    // Hitung transaksi yang berhasil (total struk dikurangi yang batal)
+    val successfulTransactionsCount = groupedTransactions.size - canceledTransactionsCount
+
     Column(
         modifier = modifier
             .fillMaxSize()
@@ -422,10 +449,16 @@ fun BerandaTabContent(
                     color = MaterialTheme.colorScheme.primary
                 )
                 Spacer(modifier = Modifier.height(4.dp))
+                val summaryText = if (canceledTransactionsCount > 0) {
+                    "$successfulTransactionsCount Transaksi Berhasil • $canceledTransactionsCount Dibatalkan"
+                } else {
+                    "$successfulTransactionsCount Transaksi Berhasil"
+                }
+
                 Text(
-                    text = "${transaksiList.size} Transaksi Berhasil",
+                    text = summaryText,
                     style = MaterialTheme.typography.labelMedium,
-                    color = SuccessColor
+                    color = if (canceledTransactionsCount > 0) Color.Gray else SuccessColor
                 )
             }
         }
@@ -454,7 +487,7 @@ fun BerandaTabContent(
             ) {
                 // Dynamic Data for Chart from transaksiList
                 val labels = listOf("Sen", "Sel", "Rab", "Kam", "Jum", "Sab", "Min")
-                val counts = remember(transaksiList) {
+                val counts = remember(transaksiList.toList()) {
                     val arr = IntArray(7)
                     val calendar = java.util.Calendar.getInstance()
                     transaksiList.forEach { trx ->
@@ -548,6 +581,50 @@ fun PenjualanTabContent(
     var showAddMenuForm by remember { mutableStateOf(false) }
     var transactionIdToDelete by remember { mutableStateOf<String?>(null) }
     var selectedItemForDetail by remember { mutableStateOf<TransaksiHarian?>(null) }
+    var showCancelConfirmation by remember { mutableStateOf<TransaksiHarian?>(null) }
+
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val storageHelper = remember { com.example.utils.LocalStorageHelper(context) }
+    val salesViewModel: SalesViewModel = viewModel()
+
+    var showReceiptDialog by remember { mutableStateOf(false) }
+    var receiptText by remember { mutableStateOf("") }
+    var currentTransaction by remember { mutableStateOf<Transaction?>(null) }
+
+    val sharedPrefs = remember { context.getSharedPreferences("printer_prefs", Context.MODE_PRIVATE) }
+    val bluetoothAdapter = remember { BluetoothAdapter.getDefaultAdapter() }
+    var showPrinterDialog by remember { mutableStateOf(false) }
+    var pairedDevicesList by remember { mutableStateOf<List<BluetoothDevice>>(emptyList()) }
+
+    val permissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestMultiplePermissions()
+    ) { permissions ->
+        val connectGranted = permissions[android.Manifest.permission.BLUETOOTH_CONNECT] ?: true
+        if (!connectGranted) {
+            Toast.makeText(context, "Izin Bluetooth dibutuhkan untuk mencetak struk", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    fun checkBluetoothAndPrint(onPermissionGranted: () -> Unit) {
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
+            val hasPermission = androidx.core.content.ContextCompat.checkSelfPermission(
+                context,
+                android.Manifest.permission.BLUETOOTH_CONNECT
+            ) == android.content.pm.PackageManager.PERMISSION_GRANTED
+            if (hasPermission) {
+                onPermissionGranted()
+            } else {
+                permissionLauncher.launch(
+                    arrayOf(
+                        android.Manifest.permission.BLUETOOTH_CONNECT,
+                        android.Manifest.permission.BLUETOOTH_SCAN
+                    )
+                )
+            }
+        } else {
+            onPermissionGranted()
+        }
+    }
 
     val coroutineScope = rememberCoroutineScope()
     val totalPenjualanHarian = transaksiList.sumOf { it.jumlah * it.harga }
@@ -614,7 +691,7 @@ fun PenjualanTabContent(
                 fontWeight = FontWeight.Bold
             )
             Spacer(modifier = Modifier.height(8.dp))
-            val groupedTransactions = remember(transaksiList) {
+            val groupedTransactions = remember(transaksiList.toList()) {
                 transaksiList.groupBy { it.idTransaksi }
             }
             val expandedStates = remember { mutableStateMapOf<String, Boolean>() }
@@ -639,6 +716,7 @@ fun PenjualanTabContent(
                             val totalItems = itemsInTrx.size
                             val time = itemsInTrx.firstOrNull()?.waktu ?: ""
                             val cashier = itemsInTrx.firstOrNull()?.dicatatOleh ?: ""
+                            val isCanceled = itemsInTrx.any { it.namaItem.startsWith("❌") }
 
                             val dismissState = rememberSwipeToDismissBoxState(
                                 confirmValueChange = {
@@ -695,7 +773,7 @@ fun PenjualanTabContent(
                                                     }
                                                     Spacer(modifier = Modifier.width(12.dp))
                                                     Column {
-                                                        Text(trxId, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)
+                                                        Text(trxId, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold, color = if (isCanceled) DangerColor else Color.Unspecified)
                                                         Text(
                                                             text = "$time · $totalItems item · oleh $cashier",
                                                             style = MaterialTheme.typography.labelMedium,
@@ -708,7 +786,7 @@ fun PenjualanTabContent(
                                                         text = formatRupiah(totalTrxPrice.toLong()),
                                                         style = MaterialTheme.typography.bodyMedium,
                                                         fontWeight = FontWeight.Bold,
-                                                        color = SuccessColor
+                                                        color = if (isCanceled) DangerColor else SuccessColor
                                                     )
                                                     Spacer(modifier = Modifier.width(4.dp))
                                                     Icon(
@@ -731,7 +809,7 @@ fun PenjualanTabContent(
                                                             verticalAlignment = Alignment.CenterVertically
                                                         ) {
                                                             Column {
-                                                                Text(detail.namaItem, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
+                                                                Text(detail.namaItem, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold, color = if (detail.namaItem.startsWith("❌")) DangerColor else Color.Unspecified)
                                                                 Text(
                                                                     text = "${detail.jumlah} × ${formatRupiah(detail.harga.toLong())}",
                                                                     style = MaterialTheme.typography.labelMedium,
@@ -1156,8 +1234,15 @@ fun PenjualanTabContent(
                     ) {
                         TextButton(
                             onClick = {
-                                coroutineScope.launch {
-                                    snackbarHostState.showSnackbar("Mencetak ulang struk ${item.idTransaksi}...")
+                                val transaction = storageHelper.getNestedTransactions().find { it.kodeTransaksi == item.idTransaksi }
+                                if (transaction != null) {
+                                    currentTransaction = transaction
+                                    receiptText = salesViewModel.formatReceipt(transaction)
+                                    showReceiptDialog = true
+                                } else {
+                                    coroutineScope.launch {
+                                        snackbarHostState.showSnackbar("Data transaksi tidak ditemukan")
+                                    }
                                 }
                                 selectedItemForDetail = null
                             }
@@ -1173,22 +1258,186 @@ fun PenjualanTabContent(
                     if (!item.namaItem.startsWith("❌")) {
                         TextButton(
                             onClick = {
-                                val index = transaksiList.indexOfFirst { it.id == item.id }
-                                if (index != -1) {
-                                    transaksiList[index] = item.copy(
-                                        namaItem = "❌ [BATAL] ${item.namaItem}",
-                                        harga = 0.0
-                                    )
-                                }
-                                coroutineScope.launch {
-                                    snackbarHostState.showSnackbar("Transaksi ${item.idTransaksi} berhasil dibatalkan")
-                                }
-                                selectedItemForDetail = null
+                                showCancelConfirmation = item
                             }
                         ) {
                             Text("Batalkan", color = DangerColor)
                         }
                     }
+                }
+            )
+        }
+
+        if (showReceiptDialog) {
+            AlertDialog(
+                onDismissRequest = { 
+                    showReceiptDialog = false
+                },
+                title = { Text("Struk Penjualan") },
+                text = {
+                    Surface(
+                        modifier = Modifier.fillMaxWidth(),
+                        color = Color.White,
+                        shape = RoundedCornerShape(4.dp),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, Color.LightGray)
+                    ) {
+                        Text(
+                            text = receiptText,
+                            modifier = Modifier.padding(16.dp),
+                            fontFamily = FontFamily.Monospace,
+                            fontSize = 12.sp,
+                            lineHeight = 16.sp,
+                            color = Color.Black
+                        )
+                    }
+                },
+                dismissButton = {
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        TextButton(onClick = {
+                            currentTransaction?.let { trx ->
+                                val quotationData = TransactionModel(
+                                    customerName = "Pelanggan Umum",
+                                    customerAddress = "Jl. Raya Warung No. 123",
+                                    items = trx.items.map { 
+                                        InvoiceItem(
+                                            name = it.namaBarang,
+                                            qty = it.qty,
+                                            price = it.harga.toDouble()
+                                        )
+                                    },
+                                    salesName = "Admin Warung",
+                                    invoiceCode = trx.kodeTransaksi,
+                                    date = SimpleDateFormat("dd/MM/yyyy", Locale.getDefault()).format(Date(trx.tanggalTransaksi)),
+                                    notes = "Terima kasih atas kunjungan Anda."
+                                )
+                                generateQuotationPdf(context, quotationData, salesViewModel.namaWarungState.value)
+                            }
+                        }) {
+                            Icon(AppIcons.Pdf, contentDescription = null)
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text("Export PDF")
+                        }
+
+                        TextButton(onClick = {
+                            checkBluetoothAndPrint {
+                                if (bluetoothAdapter == null) {
+                                    Toast.makeText(context, "Bluetooth tidak didukung di perangkat ini", Toast.LENGTH_SHORT).show()
+                                    return@checkBluetoothAndPrint
+                                }
+                                if (!bluetoothAdapter.isEnabled) {
+                                    Toast.makeText(context, "Nyalakan Bluetooth terlebih dahulu", Toast.LENGTH_SHORT).show()
+                                    return@checkBluetoothAndPrint
+                                }
+
+                                // Get last used printer
+                                val lastPrinterMac = sharedPrefs.getString("last_printer_mac", null)
+                                val bondedDevices = try { bluetoothAdapter.bondedDevices } catch (e: SecurityException) { emptySet() }
+                                
+                                val lastDevice = bondedDevices.find { it.address == lastPrinterMac }
+                                if (lastDevice != null) {
+                                    Toast.makeText(context, "Mencetak ke ${lastDevice.name}...", Toast.LENGTH_SHORT).show()
+                                    salesViewModel.printToThermal(lastDevice, receiptText) { success ->
+                                        val message = if (success) "Struk berhasil dicetak" else "Gagal mencetak struk"
+                                        (context as? android.app.Activity)?.runOnUiThread {
+                                            Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
+                                        }
+                                    }
+                                } else {
+                                    // Show printer selection dialog
+                                    pairedDevicesList = bondedDevices.toList()
+                                    if (pairedDevicesList.isEmpty()) {
+                                        Toast.makeText(context, "Tidak ada perangkat Bluetooth terpasang (paired). Pasangkan printer terlebih dahulu di pengaturan HP.", Toast.LENGTH_LONG).show()
+                                    } else {
+                                        showPrinterDialog = true
+                                    }
+                                }
+                            }
+                        }) {
+                            Icon(AppIcons.Print, contentDescription = null)
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text("Cetak Struk")
+                        }
+                    }
+                },
+                confirmButton = {
+                    Button(onClick = { 
+                        showReceiptDialog = false 
+                    }) {
+                        Text("Selesai")
+                    }
+                }
+            )
+        }
+
+        if (showPrinterDialog) {
+            AlertDialog(
+                onDismissRequest = { showPrinterDialog = false },
+                title = { Text("Pilih Printer Bluetooth") },
+                text = {
+                    LazyColumn(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        items(pairedDevicesList) { device ->
+                            Card(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable {
+                                        showPrinterDialog = false
+                                        sharedPrefs.edit().putString("last_printer_mac", device.address).apply()
+                                        Toast.makeText(context, "Mencetak ke ${device.name ?: "Printer"}...", Toast.LENGTH_SHORT).show()
+                                        salesViewModel.printToThermal(device, receiptText) { success ->
+                                            val message = if (success) "Struk berhasil dicetak" else "Gagal mencetak struk"
+                                            (context as? android.app.Activity)?.runOnUiThread {
+                                                Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
+                                            }
+                                        }
+                                    }
+                            ) {
+                                Column(modifier = Modifier.padding(16.dp)) {
+                                    Text(device.name ?: "Unknown Device", fontWeight = FontWeight.Bold)
+                                    Text(device.address, style = MaterialTheme.typography.bodySmall)
+                                }
+                            }
+                        }
+                    }
+                },
+                confirmButton = {
+                    TextButton(onClick = { showPrinterDialog = false }) {
+                        Text("Batal")
+                    }
+                }
+            )
+        }
+
+        showCancelConfirmation?.let { cancelItem ->
+            ConfirmDialog(
+                title = "Konfirmasi Pembatalan",
+                text = "Apakah anda yakin membatalkan penjualan ini?",
+                onConfirm = {
+                    val trxId = cancelItem.idTransaksi
+                    val indices = transaksiList.withIndex().filter { it.value.idTransaksi == trxId }.map { it.index }
+                    indices.forEach { idx ->
+                        val currentItem = transaksiList[idx]
+                        if (!currentItem.namaItem.startsWith("❌")) {
+                            transaksiList[idx] = currentItem.copy(
+                                namaItem = "❌ [BATAL] ${currentItem.namaItem}",
+                                harga = 0.0
+                            )
+                        }
+                    }
+                    coroutineScope.launch {
+                        snackbarHostState.showSnackbar("Transaksi ${cancelItem.idTransaksi} berhasil dibatalkan")
+                    }
+                    
+                    showCancelConfirmation = null
+                    selectedItemForDetail = null 
+                },
+                onDismiss = {
+                    showCancelConfirmation = null
                 }
             )
         }
@@ -1209,7 +1458,7 @@ fun BiayaTabContent(
     var itemToDelete by remember { mutableStateOf<BiayaOperasional?>(null) }
     var selectedItemForDetail by remember { mutableStateOf<BiayaOperasional?>(null) }
 
-    val categories = listOf("Semua", "Bahan Baku", "Listrik", "Gaji", "Air", "Lainnya")
+    val categories = listOf("Semua", "Bahan Baku", "Biaya Operasional", "Biaya dll")
 
     Box(modifier = modifier.fillMaxSize()) {
         Column(
@@ -1277,7 +1526,7 @@ fun BiayaTabContent(
             Spacer(modifier = Modifier.height(24.dp))
 
             // Logic to calculate totals
-            val (bahanBakuList, opsList, dllList) = remember(biayaList, selectedDateFilter) {
+            val (bahanBakuList, opsList, dllList) = remember(biayaList.toList(), selectedDateFilter) {
                 val filteredList = if (selectedDateFilter == "Semua") biayaList else biayaList.filter { isBiayaMatchingFilter(it.tanggal, selectedDateFilter) }
                 
                 val a = filteredList.filter { it.kategori == "Bahan Baku" }
@@ -1341,7 +1590,7 @@ fun BiayaTabContent(
                         Text("Tidak ada data", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
                     } else {
                         bahanBakuList.forEachIndexed { index, b ->
-                            Row(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp), horizontalArrangement = Arrangement.SpaceBetween) {
+                            Row(modifier = Modifier.fillMaxWidth().clickable { selectedItemForDetail = b }.padding(vertical = 4.dp), horizontalArrangement = Arrangement.SpaceBetween) {
                                 Text(text = "${index + 1}. ${b.keterangan}", style = MaterialTheme.typography.bodyMedium)
                                 Text(text = formatRupiah(b.jumlah), style = MaterialTheme.typography.bodyMedium)
                             }
@@ -1372,7 +1621,7 @@ fun BiayaTabContent(
                         Text("Tidak ada data", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
                     } else {
                         opsList.forEachIndexed { index, b ->
-                            Row(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp), horizontalArrangement = Arrangement.SpaceBetween) {
+                            Row(modifier = Modifier.fillMaxWidth().clickable { selectedItemForDetail = b }.padding(vertical = 4.dp), horizontalArrangement = Arrangement.SpaceBetween) {
                                 Text(text = "${index + 1}. ${b.keterangan} (${b.kategori})", style = MaterialTheme.typography.bodyMedium)
                                 Text(text = formatRupiah(b.jumlah), style = MaterialTheme.typography.bodyMedium)
                             }
@@ -1403,7 +1652,7 @@ fun BiayaTabContent(
                         Text("Tidak ada data", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
                     } else {
                         dllList.forEachIndexed { index, b ->
-                            Row(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp), horizontalArrangement = Arrangement.SpaceBetween) {
+                            Row(modifier = Modifier.fillMaxWidth().clickable { selectedItemForDetail = b }.padding(vertical = 4.dp), horizontalArrangement = Arrangement.SpaceBetween) {
                                 Text(text = "${index + 1}. ${b.keterangan}", style = MaterialTheme.typography.bodyMedium)
                                 Text(text = formatRupiah(b.jumlah), style = MaterialTheme.typography.bodyMedium)
                             }
@@ -1765,7 +2014,7 @@ fun LabaRugiTabContent(
         }
     }
 
-    val filteredTransactions = remember(transaksiList, selectedLabaDateFilter) {
+    val filteredTransactions = remember(transaksiList.toList(), selectedLabaDateFilter) {
         if (selectedLabaDateFilter == "Semua") {
             transaksiList
         } else {
@@ -1773,7 +2022,7 @@ fun LabaRugiTabContent(
         }
     }
 
-    val filteredBiaya = remember(biayaList, selectedLabaDateFilter) {
+    val filteredBiaya = remember(biayaList.toList(), selectedLabaDateFilter) {
         if (selectedLabaDateFilter == "Semua") {
             biayaList
         } else {
@@ -1829,6 +2078,20 @@ fun LabaRugiTabContent(
                     ranking = index + 1
                 )
             }
+    }
+
+    val groupedTransactions = remember(filteredTransactions) {
+        filteredTransactions.groupBy { it.idTransaksi }
+    }
+
+    val rincianPengeluaranList = remember(filteredBiaya) {
+        filteredBiaya.groupBy { it.tanggal }
+            .map { (dateStr, items) ->
+                val jumlahTransaksi = items.size
+                val totalPengeluaran = items.sumOf { it.jumlah }.toLong()
+                Triple(dateStr, jumlahTransaksi, totalPengeluaran)
+            }
+            .sortedByDescending { getCalendarForBiaya(it.first)?.timeInMillis ?: 0L }
     }
 
     Column(
@@ -2007,6 +2270,124 @@ fun LabaRugiTabContent(
                                 style = MaterialTheme.typography.bodySmall,
                                 color = Color.Gray
                             )
+                        }
+                    }
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        // --- START: RINCIAN PENGELUARAN ---
+        Text(
+            text = "Rincian Pengeluaran",
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.Bold,
+            modifier = Modifier.padding(bottom = 12.dp)
+        )
+
+        Card(
+            modifier = Modifier.fillMaxWidth().padding(bottom = 24.dp),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+            shape = RoundedCornerShape(12.dp),
+            elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+        ) {
+            Column(modifier = Modifier.padding(16.dp)) {
+                if (rincianPengeluaranList.isEmpty()) {
+                    Text(
+                        text = "Belum ada rincian pengeluaran",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = Color.Gray,
+                        modifier = Modifier.padding(vertical = 8.dp)
+                    )
+                } else {
+                    rincianPengeluaranList.forEachIndexed { index, item ->
+                        if (index > 0) {
+                            Divider(modifier = Modifier.padding(vertical = 8.dp))
+                        }
+                        Column(modifier = Modifier.fillMaxWidth()) {
+                            Text(
+                                text = item.first, // Menampilkan Tanggal
+                                style = MaterialTheme.typography.bodyMedium,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text(
+                                text = "${item.second} pengeluaran  •  - ${formatRupiah(item.third)}",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = DangerColor
+                            )
+                        }
+                    }
+                }
+            }
+        }
+        Spacer(modifier = Modifier.height(16.dp))
+
+        Text(
+            text = "🧾 Daftar Transaksi Per Struk ($selectedLabaDateFilter)",
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.Bold,
+            modifier = Modifier.padding(bottom = 12.dp)
+        )
+
+        Card(
+            modifier = Modifier.fillMaxWidth().padding(bottom = 24.dp),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+            shape = RoundedCornerShape(12.dp),
+            elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+        ) {
+            Column(modifier = Modifier.padding(16.dp)) {
+                if (groupedTransactions.isEmpty()) {
+                    Text(
+                        text = "Belum ada transaksi",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = Color.Gray,
+                        modifier = Modifier.padding(vertical = 8.dp)
+                    )
+                } else {
+                    val trxKeys = groupedTransactions.keys.toList()
+                    trxKeys.forEachIndexed { index, trxId ->
+                        val items = groupedTransactions[trxId] ?: emptyList()
+                        val totalHarga = items.sumOf { it.jumlah * it.harga }
+                        val isCanceled = items.any { it.namaItem.startsWith("❌") }
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column {
+                                Text(
+                                    text = trxId,
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    fontWeight = FontWeight.Bold,
+                                    color = if (isCanceled) DangerColor else Color.Unspecified
+                                )
+                                if (isCanceled) {
+                                    Text(
+                                        text = "Dibatalkan",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = DangerColor
+                                    )
+                                } else {
+                                    Text(
+                                        text = "Berhasil",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = SuccessColor
+                                    )
+                                }
+                            }
+                            Text(
+                                text = formatRupiah(totalHarga.toLong()),
+                                style = MaterialTheme.typography.bodyMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = if (isCanceled) DangerColor else SuccessColor
+                            )
+                        }
+
+                        if (index < trxKeys.size - 1) {
+                            Divider(modifier = Modifier.padding(vertical = 4.dp))
                         }
                     }
                 }
