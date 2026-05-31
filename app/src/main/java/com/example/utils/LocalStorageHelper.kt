@@ -10,7 +10,9 @@ import com.squareup.moshi.Moshi
 import com.squareup.moshi.Types
 import com.squareup.moshi.kotlin.reflect.KotlinJsonAdapterFactory
 
-class LocalStorageHelper(context: Context) {
+import kotlinx.coroutines.launch
+
+class LocalStorageHelper(private val context: Context) {
     private val prefs = context.getSharedPreferences("warung_prototype_data_prefs", Context.MODE_PRIVATE)
     private val moshi = Moshi.Builder().addLast(KotlinJsonAdapterFactory()).build()
 
@@ -121,21 +123,38 @@ class LocalStorageHelper(context: Context) {
         val formatter = java.text.SimpleDateFormat("HH:mm", java.util.Locale.getDefault())
         val timeStr = formatter.format(java.util.Date(transaction.tanggalTransaksi))
         
+        val newFlatItems = mutableListOf<TransaksiHarian>()
         transaction.items.forEach { item ->
-            currentFlat.add(
-                TransaksiHarian(
-                    idTransaksi = transaction.kodeTransaksi,
-                    id = item.itemId,
-                    namaItem = item.namaBarang,
-                    jumlah = item.qty,
-                    harga = item.harga.toDouble(),
-                    waktu = timeStr,
-                    dicatatOleh = "Admin Toko",
-                    catatan = "Via: $paymentMethod"
-                )
+            val flatItem = TransaksiHarian(
+                idTransaksi = transaction.kodeTransaksi,
+                id = item.itemId,
+                namaItem = item.namaBarang,
+                jumlah = item.qty,
+                harga = item.harga.toDouble(),
+                waktu = timeStr,
+                dicatatOleh = "Admin Toko",
+                catatan = "Via: $paymentMethod",
+                metodePembayaran = paymentMethod
             )
+            currentFlat.add(flatItem)
+            newFlatItems.add(flatItem)
         }
         saveTransaksiList(currentFlat)
+
+        // 3. Post to API in background (fire-and-forget sync)
+        @kotlin.OptIn(kotlinx.coroutines.DelicateCoroutinesApi::class)
+        kotlinx.coroutines.GlobalScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+            try {
+                val request = com.example.data.TransactionRequest(
+                    idTransaksi = transaction.kodeTransaksi,
+                    waktu = timeStr,
+                    dicatatOleh = "Admin Toko",
+                    payment_method = paymentMethod,
+                    items = newFlatItems
+                )
+                com.example.data.api.RetrofitClient.getTransactionApiService(context).createTransaction(request)
+            } catch (e: java.lang.Exception) {}
+        }
     }
 
     private fun getDefaultMenuList(): List<MenuItem> {

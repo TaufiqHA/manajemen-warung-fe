@@ -33,6 +33,7 @@ import com.example.data.UserRole
 import com.example.data.RincianHarian
 import com.example.data.MenuTerlaris
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.animateContentSize
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
@@ -116,8 +117,9 @@ val allMenus = listOf(
 // Structures for stateful interaction
 data class MenuItem(
     val id: String,
-    val nama: String,
-    val harga: Double
+    @com.squareup.moshi.Json(name = "name") val nama: String,
+    @com.squareup.moshi.Json(name = "price") val harga: Double,
+    @com.squareup.moshi.Json(name = "stock") val stock: Int = 100
 )
 
 data class TransaksiHarian(
@@ -128,7 +130,8 @@ data class TransaksiHarian(
     val harga: Double,
     val waktu: String,
     val dicatatOleh: String,
-    val catatan: String = ""
+    val catatan: String = "",
+    @com.squareup.moshi.Json(name = "payment_method") val metodePembayaran: String? = null
 )
 
 data class BiayaOperasional(
@@ -190,6 +193,7 @@ fun DashboardScreen(
     var activeTab by remember { mutableStateOf(DashboardTab.Beranda) }
     val context = androidx.compose.ui.platform.LocalContext.current
     val storageHelper = remember { com.example.utils.LocalStorageHelper(context) }
+    val mContext = context
     
     // Live State Lists for local mockup persistence
     val menuList = remember {
@@ -221,6 +225,32 @@ fun DashboardScreen(
 
     LaunchedEffect(biayaList.toList()) {
         storageHelper.saveBiayaList(biayaList)
+    }
+
+    LaunchedEffect(Unit) {
+        try {
+            val response = com.example.data.api.RetrofitClient.getProductApiService(mContext).getProducts()
+            if (response.isSuccessful && response.body()?.data != null) {
+                menuList.clear()
+                menuList.addAll(response.body()!!.data!!)
+            }
+        } catch (e: Exception) {}
+        
+        try {
+            val response = com.example.data.api.RetrofitClient.getTransactionApiService(mContext).getTransactions()
+            if (response.isSuccessful && response.body()?.data != null) {
+                transaksiList.clear()
+                transaksiList.addAll(response.body()!!.data!!)
+            }
+        } catch (e: Exception) {}
+
+        try {
+            val response = com.example.data.api.RetrofitClient.getExpenseApiService(mContext).getExpenses()
+            if (response.isSuccessful && response.body()?.data != null) {
+                biayaList.clear()
+                biayaList.addAll(response.body()!!.data!!)
+            }
+        } catch (e: Exception) {}
     }
 
     // Role parameters
@@ -306,6 +336,7 @@ fun DashboardScreen(
                     LabaRugiTabContent(
                         transaksiList = transaksiList,
                         biayaList = biayaList,
+                        menuList = menuList,
                         onNavigateToMonthlyReport = onNavigateToMonthlyReport
                     )
                 }
@@ -346,7 +377,9 @@ fun BerandaTabContent(
 ) {
     val coroutineScope = rememberCoroutineScope()
 
-    val totalPenjualanHarian = transaksiList.sumOf { it.jumlah * it.harga }
+    val totalPenjualanHarian = transaksiList
+        .filter { !it.namaItem.contains("[BATAL]", ignoreCase = true) }
+        .sumOf { it.jumlah * it.harga }
 
     // Kelompokkan berdasarkan idTransaksi untuk mendapatkan jumlah struk riil
     val groupedTransactions = transaksiList.groupBy { it.idTransaksi }
@@ -586,6 +619,7 @@ fun PenjualanTabContent(
     var showCancelConfirmation by remember { mutableStateOf<TransaksiHarian?>(null) }
 
     val context = androidx.compose.ui.platform.LocalContext.current
+    val mContext = context
     val storageHelper = remember { com.example.utils.LocalStorageHelper(context) }
     val salesViewModel: SalesViewModel = viewModel()
 
@@ -629,7 +663,9 @@ fun PenjualanTabContent(
     }
 
     val coroutineScope = rememberCoroutineScope()
-    val totalPenjualanHarian = transaksiList.sumOf { it.jumlah * it.harga }
+    val totalPenjualanHarian = transaksiList
+        .filter { !it.namaItem.contains("[BATAL]", ignoreCase = true) }
+        .sumOf { it.jumlah * it.harga }
 
     Box(modifier = modifier.fillMaxSize()) {
         Column(
@@ -716,7 +752,26 @@ fun PenjualanTabContent(
                             val isExpanded = expandedStates[trxId] ?: false
                             val totalTrxPrice = itemsInTrx.sumOf { it.jumlah * it.harga }
                             val totalItems = itemsInTrx.size
-                            val time = itemsInTrx.firstOrNull()?.waktu ?: ""
+                            val rawTime = itemsInTrx.firstOrNull()?.waktu ?: ""
+                            val time = try {
+                                if (rawTime.contains("T")) {
+                                    val parser = java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSSSSS'Z'", java.util.Locale.getDefault())
+                                    val formatter = java.text.SimpleDateFormat("dd MMM yyyy, HH:mm", java.util.Locale.getDefault())
+                                    val date = parser.parse(rawTime)
+                                    if (date != null) formatter.format(date) else rawTime
+                                } else {
+                                    rawTime
+                                }
+                            } catch (e: Exception) {
+                                try {
+                                    val parser = java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", java.util.Locale.getDefault())
+                                    val formatter = java.text.SimpleDateFormat("dd MMM yyyy, HH:mm", java.util.Locale.getDefault())
+                                    val date = parser.parse(rawTime)
+                                    if (date != null) formatter.format(date) else rawTime
+                                } catch (e2: Exception) {
+                                    rawTime
+                                }
+                            }
                             val cashier = itemsInTrx.firstOrNull()?.dicatatOleh ?: ""
                             val isCanceled = itemsInTrx.any { it.namaItem.startsWith("❌") }
 
@@ -730,6 +785,7 @@ fun PenjualanTabContent(
                             )
                             SwipeToDismissBox(
                                 state = dismissState,
+                                modifier = Modifier.fillMaxWidth().wrapContentHeight(),
                                 backgroundContent = {
                                     val color by animateColorAsState(
                                         when (dismissState.targetValue) {
@@ -751,6 +807,8 @@ fun PenjualanTabContent(
                                     Card(
                                         modifier = Modifier
                                             .fillMaxWidth()
+                                            .wrapContentHeight()
+                                            .animateContentSize()
                                             .clickable { expandedStates[trxId] = !isExpanded },
                                         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
                                         shape = RoundedCornerShape(8.dp)
@@ -761,7 +819,10 @@ fun PenjualanTabContent(
                                                 horizontalArrangement = Arrangement.SpaceBetween,
                                                 verticalAlignment = Alignment.CenterVertically
                                             ) {
-                                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                                Row(
+                                                    verticalAlignment = Alignment.CenterVertically,
+                                                    modifier = Modifier.weight(1f)
+                                                ) {
                                                     Box(
                                                         modifier = Modifier
                                                             .size(40.dp)
@@ -774,12 +835,14 @@ fun PenjualanTabContent(
                                                         Text("🧾", style = MaterialTheme.typography.titleSmall)
                                                     }
                                                     Spacer(modifier = Modifier.width(12.dp))
-                                                    Column {
+                                                    Column(modifier = Modifier.weight(1f)) {
                                                         Text(trxId, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold, color = if (isCanceled) DangerColor else Color.Unspecified)
                                                         Text(
                                                             text = "$time · $totalItems item · oleh $cashier",
                                                             style = MaterialTheme.typography.labelMedium,
-                                                            color = Color.Gray
+                                                            color = Color.Gray,
+                                                            maxLines = 1,
+                                                            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
                                                         )
                                                     }
                                                 }
@@ -1127,7 +1190,30 @@ fun PenjualanTabContent(
                             // Dynamic registration
                             val uniqueId = (transaksiList.size + 1).toString()
                             val trxId = "TRX-20260521-00" + (transaksiList.distinctBy { it.idTransaksi }.size + 1)
-                            transaksiList.add(
+                            val newTrx = TransaksiHarian(
+                                     idTransaksi = trxId,
+                                     id = uniqueId,
+                                     namaItem = namaItem,
+                                     jumlah = qty.toIntOrNull() ?: 1,
+                                     harga = priceValue,
+                                     waktu = "10:30",
+                                     dicatatOleh = role,
+                                     catatan = catatan
+                                 )
+                                 coroutineScope.launch {
+                                     try {
+                                         val request = com.example.data.TransactionRequest(
+                                             idTransaksi = newTrx.idTransaksi,
+                                             waktu = newTrx.waktu,
+                                             dicatatOleh = newTrx.dicatatOleh,
+                                             payment_method = "Cash",
+                                             items = listOf(newTrx)
+                                         )
+                                         com.example.data.api.RetrofitClient.getTransactionApiService(mContext).createTransaction(request)
+                                     } catch (e: Exception) {}
+                                 }
+                                 transaksiList.add(newTrx)
+                                 if (false) transaksiList.add(
                                 TransaksiHarian(
                                     idTransaksi = trxId,
                                     id = uniqueId,
@@ -1422,17 +1508,27 @@ fun PenjualanTabContent(
                 onConfirm = {
                     val trxId = cancelItem.idTransaksi
                     val indices = transaksiList.withIndex().filter { it.value.idTransaksi == trxId }.map { it.index }
-                    indices.forEach { idx ->
-                        val currentItem = transaksiList[idx]
-                        if (!currentItem.namaItem.startsWith("❌")) {
-                            transaksiList[idx] = currentItem.copy(
-                                namaItem = "❌ [BATAL] ${currentItem.namaItem}",
-                                harga = 0.0
-                            )
-                        }
-                    }
                     coroutineScope.launch {
-                        snackbarHostState.showSnackbar("Transaksi ${cancelItem.idTransaksi} berhasil dibatalkan")
+                        try {
+                            val response = com.example.data.api.RetrofitClient.getTransactionApiService(mContext)
+                                .cancelTransaction(trxId, com.example.data.CancelTransactionRequest(reason = "Pembatalan oleh kasir"))
+                            if (response.isSuccessful) {
+                                indices.forEach { idx ->
+                                    val currentItem = transaksiList[idx]
+                                    if (!currentItem.namaItem.startsWith("❌")) {
+                                        transaksiList[idx] = currentItem.copy(
+                                            namaItem = "❌ [BATAL] ${currentItem.namaItem}",
+                                            harga = 0.0
+                                        )
+                                    }
+                                }
+                                snackbarHostState.showSnackbar("Transaksi $trxId berhasil dibatalkan")
+                            } else {
+                                snackbarHostState.showSnackbar("Gagal membatalkan transaksi di server")
+                            }
+                        } catch (e: Exception) {
+                            snackbarHostState.showSnackbar("Error: ${e.localizedMessage ?: "Koneksi gagal"}")
+                        }
                     }
                     
                     showCancelConfirmation = null
@@ -1456,6 +1552,8 @@ fun BiayaTabContent(
     modifier: Modifier = Modifier
 ) {
     val context = androidx.compose.ui.platform.LocalContext.current
+    val mContext = context
+    val coroutineScope = rememberCoroutineScope()
     var showAddForm by remember { mutableStateOf(false) }
     var itemToDelete by remember { mutableStateOf<BiayaOperasional?>(null) }
     var selectedItemForDetail by remember { mutableStateOf<BiayaOperasional?>(null) }
@@ -1827,7 +1925,19 @@ fun BiayaTabContent(
                             if (isEdit) {
                                 val index = biayaList.indexOfFirst { it.id == itemToEdit!!.id }
                                 if (index != -1) {
-                                    biayaList[index] = itemToEdit!!.copy(
+                                    val updatedExpense = itemToEdit!!.copy(
+                                        kategori = selectedKategori,
+                                        keterangan = keterangan,
+                                        jumlah = nominalVal,
+                                        tanggal = selectedDate
+                                    )
+                                    coroutineScope.launch {
+                                        try {
+                                             com.example.data.api.RetrofitClient.getExpenseApiService(mContext).updateExpense(updatedExpense.id, updatedExpense)
+                                        } catch (e: Exception) {}
+                                    }
+                                    biayaList[index] = updatedExpense
+                                    if (false) itemToEdit!!.copy(
                                         kategori = selectedKategori,
                                         keterangan = keterangan,
                                         jumlah = nominalVal,
@@ -1836,7 +1946,21 @@ fun BiayaTabContent(
                                 }
                                 itemToEdit = null
                             } else {
-                                biayaList.add(
+                                val newExpense = BiayaOperasional(
+                                    id = java.util.UUID.randomUUID().toString(),
+                                    kategori = selectedKategori,
+                                    keterangan = keterangan,
+                                    jumlah = nominalVal,
+                                    tanggal = selectedDate,
+                                    pembuat = role
+                                )
+                                coroutineScope.launch {
+                                    try {
+                                        com.example.data.api.RetrofitClient.getExpenseApiService(mContext).addExpense(newExpense)
+                                    } catch (e: Exception) {}
+                                }
+                                biayaList.add(newExpense)
+                                if (false) biayaList.add(
                                     BiayaOperasional(
                                         id = (biayaList.size + 1).toString(),
                                         kategori = selectedKategori,
@@ -1870,6 +1994,11 @@ fun BiayaTabContent(
                 title = "Hapus Riwayat Biaya?",
                 text = "Catatan pengeluaran ${item.keterangan} senilai ${formatRupiah(item.jumlah)} akan dihapus permanen.",
                 onConfirm = {
+                    coroutineScope.launch {
+                        try {
+                            com.example.data.api.RetrofitClient.getExpenseApiService(mContext).deleteExpense(item.id)
+                        } catch (e: Exception) {}
+                    }
                     biayaList.remove(item)
                     itemToDelete = null
                 },
@@ -1969,6 +2098,7 @@ fun BiayaTabContent(
 fun LabaRugiTabContent(
     transaksiList: List<TransaksiHarian>,
     biayaList: List<BiayaOperasional>,
+    menuList: List<MenuItem>,
     onNavigateToMonthlyReport: () -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -2079,7 +2209,9 @@ fun LabaRugiTabContent(
         }
     }
 
-    val totalPemasukan = filteredTransactions.sumOf { it.jumlah * it.harga }
+    val totalPemasukan = filteredTransactions
+        .filter { !it.namaItem.contains("[BATAL]", ignoreCase = true) }
+        .sumOf { it.jumlah * it.harga }
     val totalBiaya = filteredBiaya.sumOf { it.jumlah }
     val labaBersih = totalPemasukan - totalBiaya
 
@@ -2095,7 +2227,9 @@ fun LabaRugiTabContent(
     }
 
     val rincianList = remember(filteredTransactions) {
-        filteredTransactions.groupBy { getTrxDateStr(it.idTransaksi) }
+        filteredTransactions
+            .filter { !it.namaItem.contains("[BATAL]", ignoreCase = true) }
+            .groupBy { getTrxDateStr(it.idTransaksi) }
             .map { (dateStr, items) ->
                 val readableDate = formatReadableDate(dateStr)
                 val uniqueTrxCount = items.distinctBy { it.idTransaksi }.size
@@ -2110,12 +2244,16 @@ fun LabaRugiTabContent(
             .map { it.second }
     }
 
-    val menuTerlarisList = remember(filteredTransactions) {
-        filteredTransactions.groupBy { it.namaItem }
-            .map { (namaItem, items) ->
+    val menuTerlarisList = remember(filteredTransactions, menuList.toList()) {
+        filteredTransactions
+            .filter { !it.namaItem.contains("[BATAL]", ignoreCase = true) }
+            .groupBy { it.id } // Grouping by Product ID instead of Name
+            .map { (productId, items) ->
                 val totalQty = items.sumOf { it.jumlah }
                 val totalRevenue = items.sumOf { it.jumlah * it.harga }
-                namaItem to Pair(totalQty, totalRevenue)
+                // Get clean name from menuList if available, otherwise use the one from transaction
+                val originalName = menuList.find { it.id == productId }?.nama ?: items.first().namaItem
+                originalName to Pair(totalQty, totalRevenue)
             }
             .sortedByDescending { it.second.first }
             .take(5)
@@ -2428,11 +2566,25 @@ fun LabaRugiTabContent(
                                         color = DangerColor
                                     )
                                 } else {
-                                    Text(
-                                        text = "Berhasil",
-                                        style = MaterialTheme.typography.labelSmall,
-                                        color = SuccessColor
-                                    )
+                                    // Ambil metode pembayaran dari salah satu item di dalam struk (karena 1 struk metode pembayarannya sama)
+                                    val paymentMethod = items.firstOrNull()?.metodePembayaran ?: ""
+                                    val paymentText = if (paymentMethod.isNotEmpty()) " • ${paymentMethod.uppercase()}" else ""
+
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Text(
+                                            text = "Berhasil",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = SuccessColor
+                                        )
+                                        if (paymentText.isNotEmpty()) {
+                                            Text(
+                                                text = paymentText,
+                                                style = MaterialTheme.typography.labelSmall,
+                                                color = Color.Gray,
+                                                modifier = Modifier.padding(start = 4.dp)
+                                            )
+                                        }
+                                    }
                                 }
                             }
                             Text(
@@ -2533,6 +2685,8 @@ fun BarangTabContent(
     var editHargaMenu by remember { mutableStateOf("") }
     var editError by remember { mutableStateOf(false) }
 
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val mContext = context
     val coroutineScope = rememberCoroutineScope()
 
     Box(modifier = modifier.fillMaxSize()) {
@@ -2584,7 +2738,12 @@ fun BarangTabContent(
                                             Icon(AppIcons.Edit, contentDescription = "Edit", tint = MaterialTheme.colorScheme.primary)
                                         }
                                         IconButton(onClick = { 
-                                            menuList.remove(item)
+                                            coroutineScope.launch {
+                                                 try {
+                                                     com.example.data.api.RetrofitClient.getProductApiService(mContext).deleteProduct(item.id)
+                                                 } catch (e: Exception) {}
+                                             }
+                                             menuList.remove(item)
                                             coroutineScope.launch {
                                                 snackbarHostState.showSnackbar("Barang berhasil dihapus")
                                             }
@@ -2640,7 +2799,13 @@ fun BarangTabContent(
                     Button(onClick = {
                         val h = hargaMenu.toDoubleOrNull() ?: 0.0
                         if (namaMenu.isNotBlank() && h > 0) {
-                            menuList.add(MenuItem(java.util.UUID.randomUUID().toString(), namaMenu, h))
+                            val newMenuItem = MenuItem(java.util.UUID.randomUUID().toString(), namaMenu, h)
+                            coroutineScope.launch {
+                                try {
+                                    com.example.data.api.RetrofitClient.getProductApiService(mContext).addProduct(newMenuItem)
+                                } catch (e: Exception) {}
+                            }
+                            menuList.add(newMenuItem)
                             showAddMenuForm = false
                             coroutineScope.launch {
                                 snackbarHostState.showSnackbar("Barang berhasil ditambahkan")
@@ -2700,7 +2865,14 @@ fun BarangTabContent(
                         if (editNamaMenu.isNotBlank() && h > 0) {
                             val index = menuList.indexOfFirst { it.id == currentItem.id }
                             if (index != -1) {
-                                menuList[index] = currentItem.copy(nama = editNamaMenu, harga = h)
+                                val updatedMenuItem = currentItem.copy(nama = editNamaMenu, harga = h)
+                                 coroutineScope.launch {
+                                     try {
+                                         com.example.data.api.RetrofitClient.getProductApiService(mContext)
+                                             .updateProduct(updatedMenuItem.id, updatedMenuItem)
+                                     } catch (e: Exception) {}
+                                 }
+                                 menuList[index] = updatedMenuItem
                                 coroutineScope.launch {
                                     snackbarHostState.showSnackbar("Barang berhasil diupdate")
                                 }

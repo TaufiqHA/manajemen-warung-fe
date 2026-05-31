@@ -13,33 +13,23 @@ class AuthRepository(private val context: Context) {
 
     suspend fun login(email: String, password: String): Result<LoginResponse> {
         return try {
-            delay(1000) // Mock network delay
+            val response = com.example.data.api.RetrofitClient.getAuthApiService(context)
+                .login(LoginRequest(email = email, password = password))
             
-            // Simple hardcoded mock validation
-            val (mockUser, mockToken) = when (email) {
-                "owner@warung.com" -> Pair(
-                    UserData("1", "Owner Budi", email, UserRole.OWNER),
-                    "mock_token_owner_123"
-                )
-                "admin@warung.com" -> Pair(
-                    UserData("2", "Admin Siti", email, UserRole.ADMIN_TOKO),
-                    "mock_token_admin_123"
-                )
-                "adminkantor@warung.com" -> Pair(
-                    UserData("3", "Admin Kantor Joko", email, UserRole.ADMIN_KANTOR),
-                    "mock_token_adminkantor_123"
-                )
-                else -> null
-            } ?: throw Exception("Email atau kata sandi salah")
-
-            if (password != "password") {
-                throw Exception("Email atau kata sandi salah")
+            if (response.isSuccessful && response.body() != null) {
+                val baseResponse = response.body()!!
+                if (baseResponse.success && baseResponse.data != null) {
+                    val loginResponse = baseResponse.data
+                    tokenManager.saveToken(loginResponse.token)
+                    tokenManager.saveUser(loginResponse.user.id, loginResponse.user.username, loginResponse.user.role.name)
+                    Result.success(loginResponse)
+                } else {
+                    Result.failure(Exception(baseResponse.message ?: "Login gagal, data tidak ditemukan"))
+                }
+            } else {
+                val errorMsg = response.errorBody()?.string() ?: "Email atau kata sandi salah"
+                Result.failure(Exception(errorMsg))
             }
-
-            tokenManager.saveToken(mockToken)
-            tokenManager.saveUser(mockUser.id, mockUser.username, mockUser.role.name)
-
-            Result.success(LoginResponse(token = mockToken, user = mockUser))
         } catch (e: Exception) {
             Result.failure(e)
         }
@@ -47,7 +37,7 @@ class AuthRepository(private val context: Context) {
 
     suspend fun logout(): Result<Unit> {
         return try {
-            delay(500)
+            com.example.data.api.RetrofitClient.getAuthApiService(context).logout()
             tokenManager.clearAll()
             Result.success(Unit)
         } catch (e: Exception) {

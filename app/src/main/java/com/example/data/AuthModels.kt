@@ -26,3 +26,11 @@ data class UserData(
 data class UserResponse(
     val user: UserData
 )
+
+@JsonClass(generateAdapter = true)
+data class BaseResponse<T>(
+    val success: Boolean,
+    val message: String? = null,
+    val data: T? = null
+)
+

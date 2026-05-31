@@ -12,17 +12,14 @@ class UserRepository(private val context: Context) {
 
     suspend fun getCurrentUser(): Result<UserResponse> {
         return try {
-            delay(500)
-            val userId = tokenManager.getUserId()
-            val userName = tokenManager.getUserName()
-            val userRoleStr = tokenManager.getUserRole()
-            
-            if (userId != null && userName != null && userRoleStr != null) {
-                val role = try { UserRole.valueOf(userRoleStr) } catch(e: Exception) { UserRole.ADMIN_TOKO }
-                val mockUser = UserData(id = userId, username = userName, email = "mock@warung.com", role = role)
-                Result.success(UserResponse(user = mockUser))
+            val response = com.example.data.api.RetrofitClient.getUserApiService(context).getCurrentUser()
+            if (response.isSuccessful && response.body() != null) {
+                val userResponse = response.body()!!
+                tokenManager.saveUser(userResponse.user.id, userResponse.user.username, userResponse.user.role.name)
+                Result.success(userResponse)
             } else {
-                Result.failure(Exception("User not logged in"))
+                val errorMsg = response.errorBody()?.string() ?: "Gagal mengambil data user"
+                Result.failure(Exception(errorMsg))
             }
         } catch (e: Exception) {
             Result.failure(e)

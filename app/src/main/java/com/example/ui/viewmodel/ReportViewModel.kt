@@ -5,6 +5,7 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.data.*
 import kotlinx.coroutines.flow.*
+import kotlinx.coroutines.*
 import java.util.Calendar
 
 class ReportViewModel(application: Application) : AndroidViewModel(application) {
@@ -31,8 +32,61 @@ class ReportViewModel(application: Application) : AndroidViewModel(application) 
     fun loadData() {
         val menuItems = storageHelper.getMenuList()
         _allItems.value = menuItems.map { Item(it.id, it.nama, it.harga.toLong()) }
-        
         _allTransactions.value = storageHelper.getNestedTransactions()
+
+        viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+            try {
+                val pResponse = com.example.data.api.RetrofitClient.getProductApiService(getApplication()).getProducts()
+                if (pResponse.isSuccessful && pResponse.body()?.data != null) {
+                    val apiItems = pResponse.body()!!.data!!
+                    storageHelper.saveMenuList(apiItems)
+                    launch(kotlinx.coroutines.Dispatchers.Main) {
+                        _allItems.value = apiItems.map { Item(it.id, it.nama, it.harga.toLong()) }
+                    }
+                }
+            } catch (e: Exception) {}
+
+            try {
+                val tResponse = com.example.data.api.RetrofitClient.getTransactionApiService(getApplication()).getTransactions()
+                if (tResponse.isSuccessful && tResponse.body()?.data != null) {
+                    val apiFlatTrx = tResponse.body()!!.data!!
+                    storageHelper.saveTransaksiList(apiFlatTrx)
+                    
+                    val grouped = apiFlatTrx.groupBy { it.idTransaksi }
+                    val transactions = grouped.map { (trxId, items) ->
+                        val firstItem = items.firstOrNull()
+                        val formatter = java.text.SimpleDateFormat("yyyyMMdd-HHmmss", java.util.Locale.getDefault())
+                        val dateLong = try {
+                            val cleanId = trxId.substringAfter("TRX-")
+                            formatter.parse(cleanId)?.time ?: System.currentTimeMillis()
+                        } catch (e: Exception) {
+                            System.currentTimeMillis()
+                        }
+                        
+                        val trxItems = items.map {
+                            TransactionItem(
+                                itemId = it.id,
+                                namaBarang = it.namaItem,
+                                qty = it.jumlah,
+                                harga = it.harga.toLong(),
+                                subTotal = (it.jumlah * it.harga).toLong()
+                            )
+                        }
+                        
+                        Transaction(
+                            kodeTransaksi = trxId,
+                            tanggalTransaksi = dateLong,
+                            items = trxItems,
+                            totalHarga = trxItems.sumOf { it.subTotal }
+                        )
+                    }
+                    storageHelper.saveNestedTransactions(transactions)
+                    launch(kotlinx.coroutines.Dispatchers.Main) {
+                        _allTransactions.value = transactions
+                    }
+                }
+            } catch (e: Exception) {}
+        }
     }
 
     // Logika Inti: Filter berdasarkan bulan & item, lalu group berdasarkan tanggal
@@ -50,7 +104,7 @@ class ReportViewModel(application: Application) : AndroidViewModel(application) 
             val txMonth = calendar.get(Calendar.MONTH) + 1
             
             if (txMonth == month) {
-                tx.items.filter { it.itemId == itemId }.map {
+                tx.items.filter { it.itemId == itemId && !it.namaBarang.contains("[BATAL]", ignoreCase = true) }.map {
                     calendar.get(Calendar.DAY_OF_MONTH) to it.subTotal.toDouble()
                 }
             } else {

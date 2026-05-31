@@ -232,7 +232,7 @@ fun generateLabaRugiPdf(context: Context, transaksiList: List<TransaksiHarian>, 
     summaryTable.addCell(Cell().add(Paragraph("TOTAL PENDAPATAN (PENJUALAN)").setBold()))
     summaryTable.addCell(Cell().add(Paragraph(formatRupiah(totalPemasukan)).setBold().setTextAlignment(TextAlignment.RIGHT)))
 
-    summaryTable.addCell(Cell().add(Paragraph("TOTAL PENGELUARAN (BIAYA OPERASIONAL)").setBold()))
+    summaryTable.addCell(Cell().add(Paragraph("TOTAL PENGELUARAN").setBold()))
     summaryTable.addCell(Cell().add(Paragraph(formatRupiah(totalPengeluaran)).setBold().setTextAlignment(TextAlignment.RIGHT)))
 
     val profitCell = Cell().add(Paragraph("LABA BERSIH").setBold().setFontSize(14f))

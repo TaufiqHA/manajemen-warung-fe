@@ -25,6 +25,7 @@ import com.example.ui.components.ConfirmDialog
 import com.example.ui.theme.DangerColor
 import com.example.ui.theme.SuccessColor
 import com.example.ui.viewmodel.ProfilViewModel
+import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.viewmodel.compose.viewModel
 
 @Composable
@@ -165,6 +166,7 @@ fun ProfilTabContent(
         // --- Card: Pengaturan Akun ---
         if (userRole == UserRole.OWNER) {
             val profilViewModel: ProfilViewModel = viewModel()
+            val context = LocalContext.current
             Card(
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(12.dp),
@@ -252,7 +254,7 @@ fun ProfilTabContent(
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
                         Button(
-                            onClick = { profilViewModel.saveProfile() },
+                            onClick = { profilViewModel.saveProfile(context) },
                             colors = ButtonDefaults.buttonColors(containerColor = SuccessColor),
                             shape = RoundedCornerShape(8.dp),
                             modifier = Modifier.weight(1f)

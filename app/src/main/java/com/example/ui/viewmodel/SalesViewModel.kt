@@ -49,6 +49,19 @@ class SalesViewModel(application: Application) : AndroidViewModel(application) {
     fun loadItems() {
         val menuItems = storageHelper.getMenuList()
         _allItems.value = menuItems.map { Item(it.id, it.nama, it.harga.toLong()) }
+
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                val response = com.example.data.api.RetrofitClient.getProductApiService(getApplication()).getProducts()
+                if (response.isSuccessful && response.body()?.data != null) {
+                    val apiItems = response.body()!!.data!!
+                    storageHelper.saveMenuList(apiItems)
+                    launch(Dispatchers.Main) {
+                        _allItems.value = apiItems.map { Item(it.id, it.nama, it.harga.toLong()) }
+                    }
+                }
+            } catch (e: Exception) {}
+        }
     }
    
     private val _searchQuery = MutableStateFlow("")

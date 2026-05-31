@@ -10,7 +10,7 @@ import retrofit2.Retrofit
 import retrofit2.converter.moshi.MoshiConverterFactory
 
 object RetrofitClient {
-    private const val BASE_URL = "http://10.211.110.207:8000" // Connection to local server by IP address
+    private const val BASE_URL = "http://sambalradja.berandahukum.com" // Connection to local server by IP address
 
     private val moshi: Moshi = Moshi.Builder()
         .addLast(KotlinJsonAdapterFactory())
@@ -55,5 +55,21 @@ object RetrofitClient {
 
     fun getUserApiService(context: Context): UserApiService {
         return getRetrofit(context).create(UserApiService::class.java)
+    }
+
+    fun getProductApiService(context: Context): ProductApiService {
+        return getRetrofit(context).create(ProductApiService::class.java)
+    }
+
+    fun getExpenseApiService(context: Context): ExpenseApiService {
+        return getRetrofit(context).create(ExpenseApiService::class.java)
+    }
+
+    fun getTransactionApiService(context: Context): TransactionApiService {
+        return getRetrofit(context).create(TransactionApiService::class.java)
+    }
+
+    fun getWarungSettingApiService(context: Context): WarungSettingApiService {
+        return getRetrofit(context).create(WarungSettingApiService::class.java)
     }
 }

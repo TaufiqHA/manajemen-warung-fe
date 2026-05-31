@@ -65,7 +65,7 @@ class ProfilViewModel(application: Application) : AndroidViewModel(application) 
         emailError = null
     }
 
-    fun saveProfile(onSuccess: () -> Unit = {}) {
+    fun saveProfile(context: android.content.Context, onSuccess: () -> Unit = {}) {
         clearErrors()
         var hasError = false
 
@@ -93,12 +93,29 @@ class ProfilViewModel(application: Application) : AndroidViewModel(application) 
 
         if (!hasError) {
             viewModelScope.launch {
-                userPrefs.saveProfile(
-                    nama = namaInput.trim(),
-                    alamat = alamatInput.trim(),
-                    email = emailInput.trim()
-                )
-                onSuccess()
+                try {
+                    val apiService = com.example.data.api.RetrofitClient.getWarungSettingApiService(context)
+                    val request = com.example.data.UpdateWarungRequest(
+                        name = namaInput.trim(),
+                        address = alamatInput.trim(),
+                        email = emailInput.trim()
+                    )
+
+                    val response = apiService.updateWarungSetting(request)
+
+                    if (response.isSuccessful) {
+                        userPrefs.saveProfile(
+                            nama = namaInput.trim(),
+                            alamat = alamatInput.trim(),
+                            email = emailInput.trim()
+                        )
+                        onSuccess()
+                    } else {
+                        namaError = "Gagal menyimpan ke server"
+                    }
+                } catch (e: Exception) {
+                    namaError = "Gangguan koneksi internet"
+                }
             }
         }
     }

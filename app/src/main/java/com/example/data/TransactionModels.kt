@@ -23,3 +23,21 @@ data class Transaction(
     val diskonNominal: Long = 0L,
     val totalSetelahDiskon: Long = totalHarga
 )
+
+data class TransactionRequest(
+    val idTransaksi: String?,
+    val waktu: String?,
+    val dicatatOleh: String?,
+    val payment_method: String? = null,
+    val items: List<com.example.ui.screens.TransaksiHarian>
+)
+
+data class CancelTransactionRequest(
+    val reason: String
+)
+
+data class UpdateWarungRequest(
+    val name: String,
+    val address: String,
+    val email: String
+)
