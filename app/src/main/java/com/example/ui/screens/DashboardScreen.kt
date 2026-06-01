@@ -37,6 +37,7 @@ import androidx.compose.animation.animateContentSize
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
+import androidx.compose.material.icons.filled.Refresh
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.ui.viewmodel.SalesViewModel
 import android.bluetooth.BluetoothAdapter
@@ -119,7 +120,8 @@ data class MenuItem(
     val id: String,
     @com.squareup.moshi.Json(name = "name") val nama: String,
     @com.squareup.moshi.Json(name = "price") val harga: Double,
-    @com.squareup.moshi.Json(name = "stock") val stock: Int = 100
+    @com.squareup.moshi.Json(name = "stock") val stock: Int = 100,
+    @com.squareup.moshi.Json(name = "category") val kategori: String = "Lainnya"
 )
 
 data class TransaksiHarian(
@@ -676,11 +678,38 @@ fun PenjualanTabContent(
                 .padding(16.dp)
         ) {
             Spacer(modifier = Modifier.height(28.dp))
-            Text(
-                text = "Penjualan Harian",
-                style = MaterialTheme.typography.titleLarge,
-                fontWeight = FontWeight.Bold
-            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "Penjualan Harian",
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold
+                )
+                
+                IconButton(onClick = {
+                    coroutineScope.launch {
+                        try {
+                            val response = com.example.data.api.RetrofitClient.getTransactionApiService(mContext).getTransactions()
+                            if (response.isSuccessful && response.body()?.data != null) {
+                                transaksiList.clear()
+                                transaksiList.addAll(response.body()!!.data!!)
+                                snackbarHostState.showSnackbar("Data berhasil diperbarui")
+                            }
+                        } catch (e: Exception) {
+                            snackbarHostState.showSnackbar("Gagal memuat ulang data")
+                        }
+                    }
+                }) {
+                    Icon(
+                        imageVector = androidx.compose.material.icons.Icons.Default.Refresh, 
+                        contentDescription = "Refresh Data",
+                        tint = MaterialTheme.colorScheme.primary
+                    )
+                }
+            }
             Text(
                 text = currentDate,
                 style = MaterialTheme.typography.labelMedium,
@@ -737,7 +766,13 @@ fun PenjualanTabContent(
             val expandedStates = remember { mutableStateMapOf<String, Boolean>() }
 
             if (transaksiList.isEmpty()) {
-                Box(modifier = Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
+                Box(
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxWidth()
+                        .verticalScroll(rememberScrollState()),
+                    contentAlignment = Alignment.Center
+                ) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
                         Icon(AppIcons.Store, contentDescription = null, modifier = Modifier.size(64.dp), tint = Color.LightGray)
                         Spacer(modifier = Modifier.height(12.dp))
@@ -1208,7 +1243,7 @@ fun PenjualanTabContent(
                                              idTransaksi = newTrx.idTransaksi,
                                              waktu = newTrx.waktu,
                                              dicatatOleh = newTrx.dicatatOleh,
-                                             payment_method = "Cash",
+                                             payment_method = "CASH",
                                              items = listOf(newTrx)
                                          )
                                          com.example.data.api.RetrofitClient.getTransactionApiService(mContext).createTransaction(request)
@@ -2686,7 +2721,16 @@ fun BarangTabContent(
     var itemToEdit by remember { mutableStateOf<MenuItem?>(null) }
     var editNamaMenu by remember { mutableStateOf("") }
     var editHargaMenu by remember { mutableStateOf("") }
+    var editKategoriMenu by remember { mutableStateOf("") }
     var editError by remember { mutableStateOf(false) }
+    var itemToDelete by remember { mutableStateOf<MenuItem?>(null) }
+    var kategoriMenu by remember { mutableStateOf("") }
+
+    val existingCategories = menuList.map { it.kategori }.distinct().filter { it.isNotBlank() }
+    var customCategories by remember { mutableStateOf(listOf<String>()) }
+    val allCategories = (existingCategories + customCategories).distinct()
+    var showAddKategoriModal by remember { mutableStateOf(false) }
+    var newKategoriName by remember { mutableStateOf("") }
 
     val context = androidx.compose.ui.platform.LocalContext.current
     val mContext = context
@@ -2699,15 +2743,35 @@ fun BarangTabContent(
                 .padding(16.dp)
         ) {
             Spacer(modifier = Modifier.height(28.dp))
-            Text(
-                text = "Barang",
-                style = MaterialTheme.typography.titleLarge,
-                fontWeight = FontWeight.Bold
-            )
-            Spacer(modifier = Modifier.height(16.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "Barang",
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold
+                )
+                IconButton(onClick = { 
+                    com.example.utils.generateMenuCetakPdf(context, menuList) 
+                }) {
+                    Icon(
+                        imageVector = AppIcons.Pdf, 
+                        contentDescription = "Export PDF Menu", 
+                        tint = MaterialTheme.colorScheme.primary
+                    )
+                }
+            }
 
             if (menuList.isEmpty()) {
-                Box(modifier = Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
+                Box(
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxWidth()
+                        .verticalScroll(rememberScrollState()),
+                    contentAlignment = Alignment.Center
+                ) {
                     Text("Belum ada data barang", color = Color.Gray)
                 }
             } else {
@@ -2726,7 +2790,7 @@ fun BarangTabContent(
                                 horizontalArrangement = Arrangement.SpaceBetween,
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Column {
+                                Column(modifier = Modifier.weight(1f).padding(end = 8.dp)) {
                                     Text(item.nama, fontWeight = FontWeight.Bold)
                                     Text(formatRupiah(item.harga), style = MaterialTheme.typography.bodySmall, color = Color.Gray)
                                 }
@@ -2736,20 +2800,13 @@ fun BarangTabContent(
                                             itemToEdit = item
                                             editNamaMenu = item.nama
                                             editHargaMenu = item.harga.toLong().toString()
+                                            editKategoriMenu = item.kategori
                                             editError = false
                                         }) {
                                             Icon(AppIcons.Edit, contentDescription = "Edit", tint = MaterialTheme.colorScheme.primary)
                                         }
                                         IconButton(onClick = { 
-                                            coroutineScope.launch {
-                                                 try {
-                                                     com.example.data.api.RetrofitClient.getProductApiService(mContext).deleteProduct(item.id)
-                                                 } catch (e: Exception) {}
-                                             }
-                                             menuList.remove(item)
-                                            coroutineScope.launch {
-                                                snackbarHostState.showSnackbar("Barang berhasil dihapus")
-                                            }
+                                            itemToDelete = item
                                         }) {
                                             Icon(AppIcons.Delete, contentDescription = "Hapus", tint = DangerColor)
                                         }
@@ -2778,6 +2835,8 @@ fun BarangTabContent(
             var namaMenu by remember { mutableStateOf("") }
             var hargaMenu by remember { mutableStateOf("") }
 
+            var expandedKategori by remember { mutableStateOf(false) }
+
             AlertDialog(
                 onDismissRequest = { showAddMenuForm = false },
                 title = { Text("Tambah Barang Baru") },
@@ -2796,13 +2855,51 @@ fun BarangTabContent(
                             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                             modifier = Modifier.fillMaxWidth()
                         )
+                        Box(modifier = Modifier.fillMaxWidth()) {
+                            OutlinedTextField(
+                                value = kategoriMenu,
+                                onValueChange = {},
+                                readOnly = true,
+                                label = { Text("Kategori") },
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                            androidx.compose.material3.Surface(
+                                modifier = Modifier
+                                    .matchParentSize()
+                                    .clickable { expandedKategori = true },
+                                color = androidx.compose.ui.graphics.Color.Transparent
+                            ) {}
+
+                            DropdownMenu(
+                                expanded = expandedKategori,
+                                onDismissRequest = { expandedKategori = false }
+                            ) {
+                                allCategories.forEach { cat ->
+                                    DropdownMenuItem(
+                                        text = { Text(cat) },
+                                        onClick = {
+                                            kategoriMenu = cat
+                                            expandedKategori = false
+                                        }
+                                    )
+                                }
+                                DropdownMenuItem(
+                                    text = { Text("+ Tambah Kategori Baru", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold) },
+                                    onClick = {
+                                        expandedKategori = false
+                                        showAddKategoriModal = true
+                                    }
+                                )
+                            }
+                        }
                     }
                 },
                 confirmButton = {
                     Button(onClick = {
                         val h = hargaMenu.toDoubleOrNull() ?: 0.0
                         if (namaMenu.isNotBlank() && h > 0) {
-                            val newMenuItem = MenuItem(java.util.UUID.randomUUID().toString(), namaMenu, h)
+                            val newKategori = if (kategoriMenu.isNotBlank()) kategoriMenu else "Lainnya"
+                            val newMenuItem = MenuItem(java.util.UUID.randomUUID().toString(), namaMenu, h, 100, newKategori)
                             coroutineScope.launch {
                                 try {
                                     com.example.data.api.RetrofitClient.getProductApiService(mContext).addProduct(newMenuItem)
@@ -2827,6 +2924,8 @@ fun BarangTabContent(
         }
 
         itemToEdit?.let { currentItem ->
+            var expandedEditKategori by remember { mutableStateOf(false) }
+
             AlertDialog(
                 onDismissRequest = { itemToEdit = null },
                 title = { Text("Edit Barang") },
@@ -2853,6 +2952,43 @@ fun BarangTabContent(
                             isError = editError && (editHargaMenu.toDoubleOrNull() ?: 0.0) <= 0.0,
                             modifier = Modifier.fillMaxWidth()
                         )
+                        Box(modifier = Modifier.fillMaxWidth()) {
+                            OutlinedTextField(
+                                value = editKategoriMenu,
+                                onValueChange = {},
+                                readOnly = true,
+                                label = { Text("Kategori") },
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                            androidx.compose.material3.Surface(
+                                modifier = Modifier
+                                    .matchParentSize()
+                                    .clickable { expandedEditKategori = true },
+                                color = androidx.compose.ui.graphics.Color.Transparent
+                            ) {}
+
+                            DropdownMenu(
+                                expanded = expandedEditKategori,
+                                onDismissRequest = { expandedEditKategori = false }
+                            ) {
+                                allCategories.forEach { cat ->
+                                    DropdownMenuItem(
+                                        text = { Text(cat) },
+                                        onClick = {
+                                            editKategoriMenu = cat
+                                            expandedEditKategori = false
+                                        }
+                                    )
+                                }
+                                DropdownMenuItem(
+                                    text = { Text("+ Tambah Kategori Baru", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold) },
+                                    onClick = {
+                                        expandedEditKategori = false
+                                        showAddKategoriModal = true
+                                    }
+                                )
+                            }
+                        }
                         if (editError) {
                             Text(
                                 text = "Nama tidak boleh kosong & harga harus valid", 
@@ -2868,7 +3004,8 @@ fun BarangTabContent(
                         if (editNamaMenu.isNotBlank() && h > 0) {
                             val index = menuList.indexOfFirst { it.id == currentItem.id }
                             if (index != -1) {
-                                val updatedMenuItem = currentItem.copy(nama = editNamaMenu, harga = h)
+                                val finalEditKategori = if (editKategoriMenu.isNotBlank()) editKategoriMenu else "Lainnya"
+                                val updatedMenuItem = currentItem.copy(nama = editNamaMenu, harga = h, kategori = finalEditKategori)
                                  coroutineScope.launch {
                                      try {
                                          com.example.data.api.RetrofitClient.getProductApiService(mContext)
@@ -2890,6 +3027,84 @@ fun BarangTabContent(
                 },
                 dismissButton = {
                     TextButton(onClick = { itemToEdit = null }) {
+                        Text("Batal")
+                    }
+                }
+            )
+        }
+
+        itemToDelete?.let { currentItem ->
+            AlertDialog(
+                onDismissRequest = { itemToDelete = null },
+                title = { Text("Konfirmasi Hapus") },
+                text = { Text("Apakah Anda yakin ingin menghapus ${currentItem.nama}?") },
+                confirmButton = {
+                    Button(
+                        colors = ButtonDefaults.buttonColors(containerColor = DangerColor),
+                        onClick = {
+                            coroutineScope.launch {
+                                try {
+                                    com.example.data.api.RetrofitClient.getProductApiService(mContext).deleteProduct(currentItem.id)
+                                } catch (e: Exception) {}
+                            }
+                            menuList.remove(currentItem)
+                            itemToDelete = null
+                            coroutineScope.launch {
+                                snackbarHostState.showSnackbar("Barang berhasil dihapus")
+                            }
+                        }
+                    ) {
+                        Text("Hapus")
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { itemToDelete = null }) {
+                        Text("Batal")
+                    }
+                }
+            )
+        }
+
+        if (showAddKategoriModal) {
+            AlertDialog(
+                onDismissRequest = { showAddKategoriModal = false },
+                title = { Text("Tambah Kategori Baru") },
+                text = {
+                    OutlinedTextField(
+                        value = newKategoriName,
+                        onValueChange = { newKategoriName = it },
+                        label = { Text("Nama Kategori") },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                },
+                confirmButton = {
+                    Button(onClick = {
+                        if (newKategoriName.isNotBlank()) {
+                            val catName = newKategoriName
+                            
+                            // 1. Tembak API secara Asynchronous
+                            coroutineScope.launch {
+                                try {
+                                    val request = com.example.data.api.CategoryRequest(name = catName)
+                                    com.example.data.api.RetrofitClient.getProductApiService(mContext).addCategory(request)
+                                } catch (e: Exception) {
+                                    // Abaikan atau tampilkan pesan error jika gagal
+                                }
+                            }
+
+                            // 2. Update UI secara lokal (Optimistic UI Update)
+                            customCategories = customCategories + catName
+                            kategoriMenu = catName
+                            editKategoriMenu = catName
+                            newKategoriName = ""
+                            showAddKategoriModal = false
+                        }
+                    }) {
+                        Text("Simpan Kategori")
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { showAddKategoriModal = false }) {
                         Text("Batal")
                     }
                 }

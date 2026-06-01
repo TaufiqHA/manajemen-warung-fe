@@ -8,6 +8,7 @@ import androidx.core.content.FileProvider
 import com.example.data.TransactionModel
 import com.example.ui.screens.BiayaOperasional
 import com.example.ui.screens.TransaksiHarian
+import com.example.ui.screens.MenuItem
 import com.itextpdf.io.image.ImageDataFactory
 import com.itextpdf.kernel.geom.PageSize
 import com.itextpdf.kernel.pdf.PdfDocument
@@ -277,5 +278,95 @@ fun generateLabaRugiPdf(context: Context, transaksiList: List<TransaksiHarian>, 
     document.add(costTable)
 
     document.close()
+    openPdfFile(context, file)
+}
+
+fun generateMenuCetakPdf(context: Context, menuList: List<MenuItem>) {
+    val fileName = "Menu_Pemesanan_${System.currentTimeMillis()}.pdf"
+    val file = File(context.getExternalFilesDir(Environment.DIRECTORY_DOCUMENTS), fileName)
+    val writer = PdfWriter(FileOutputStream(file))
+    val pdf = PdfDocument(writer)
+    val document = Document(pdf, PageSize.A4)
+
+    // 1. Header (Judul dan Kotak Meja)
+    val headerTable = Table(UnitValue.createPercentArray(floatArrayOf(70f, 30f))).useAllAvailableWidth()
+    
+    val titleCell = Cell().setBorder(com.itextpdf.layout.borders.Border.NO_BORDER)
+    titleCell.add(Paragraph("DAFTAR HARGA").setBold().setFontSize(16f))
+    titleCell.add(Paragraph("MAKANAN DAN MINUMAN").setBold().setFontSize(14f))
+    headerTable.addCell(titleCell)
+
+    val mejaCell = Cell().setBorder(com.itextpdf.layout.borders.Border.NO_BORDER)
+    mejaCell.add(Paragraph("MEJA :").setBold().setFontSize(12f))
+    // Kotak kosong untuk diisi nomor meja oleh pramusaji
+    val mejaBox = Cell().setHeight(30f).setWidth(60f)
+    val mejaTable = Table(1).addCell(mejaBox)
+    mejaCell.add(mejaTable)
+    headerTable.addCell(mejaCell)
+
+    document.add(headerTable)
+    document.add(Paragraph("\n"))
+
+    // 2. Fungsi Format Harga (Misal: 15000 -> Rp. 15 K)
+    val formatHargaK = { harga: Double ->
+        val inK = (harga / 1000).toInt()
+        "Rp. $inK K"
+    }
+
+    // 3. Layout Utama Dua Kolom
+    val mainTable = Table(UnitValue.createPercentArray(floatArrayOf(48f, 4f, 48f))).useAllAvailableWidth()
+    mainTable.setBorder(com.itextpdf.layout.borders.Border.NO_BORDER)
+
+    // Kelompokkan item berdasarkan kategori
+    val groupedMenu = menuList.groupBy { it.kategori }
+
+    // Mengubah fungsi createKolomMenu agar menerima map per kategori
+    fun createKolomMenu(grouped: Map<String, List<MenuItem>>): Table {
+        val table = Table(UnitValue.createPercentArray(floatArrayOf(60f, 25f, 15f))).useAllAvailableWidth()
+        table.setBorder(com.itextpdf.layout.borders.Border.NO_BORDER)
+        
+        grouped.forEach { (kategori, items) ->
+            // Header Kategori
+            val catCell = Cell(1, 3)
+                .add(Paragraph(kategori.uppercase()).setBold().setFontSize(11f).setMarginTop(8f))
+                .setBorder(com.itextpdf.layout.borders.Border.NO_BORDER)
+            table.addCell(catCell)
+            
+            items.forEachIndexed { index, item ->
+                val numAndName = "${index + 1} ${item.nama}"
+                val nameCell = Cell().add(Paragraph(numAndName).setFontSize(10f)).setBorder(com.itextpdf.layout.borders.Border.NO_BORDER)
+                val priceCell = Cell().add(Paragraph(formatHargaK(item.harga)).setFontSize(10f)).setBorder(com.itextpdf.layout.borders.Border.NO_BORDER)
+                // Menambahkan bingkai/border halus untuk kotak isi
+                val boxCell = Cell().add(Paragraph(" ")).setHeight(15f).setBorder(com.itextpdf.layout.borders.SolidBorder(0.5f))
+                
+                table.addCell(nameCell)
+                table.addCell(priceCell)
+                table.addCell(boxCell)
+            }
+        }
+        return table
+    }
+
+    // Membagi jumlah kategori menjadi dua bagian (kiri dan kanan)
+    val keys = groupedMenu.keys.toList()
+    val midKeyIndex = (keys.size + 1) / 2
+    val leftKeys = keys.take(midKeyIndex)
+    val rightKeys = keys.drop(midKeyIndex)
+
+    val leftGroup = groupedMenu.filterKeys { it in leftKeys }
+    val rightGroup = groupedMenu.filterKeys { it in rightKeys }
+
+    val leftCell = Cell().add(createKolomMenu(leftGroup)).setBorder(com.itextpdf.layout.borders.Border.NO_BORDER)
+    val gapCell = Cell().setBorder(com.itextpdf.layout.borders.Border.NO_BORDER)
+    val rightCell = Cell().add(createKolomMenu(rightGroup)).setBorder(com.itextpdf.layout.borders.Border.NO_BORDER)
+
+    mainTable.addCell(leftCell)
+    mainTable.addCell(gapCell)
+    mainTable.addCell(rightCell)
+
+    document.add(mainTable)
+    document.close()
+
+    // Membuka file PDF
     openPdfFile(context, file)
 }

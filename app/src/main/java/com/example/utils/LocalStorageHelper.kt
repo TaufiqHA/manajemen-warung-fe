@@ -149,7 +149,7 @@ class LocalStorageHelper(private val context: Context) {
                     idTransaksi = transaction.kodeTransaksi,
                     waktu = timeStr,
                     dicatatOleh = "Admin Toko",
-                    payment_method = paymentMethod,
+                    payment_method = paymentMethod.uppercase(),
                     items = newFlatItems
                 )
                 com.example.data.api.RetrofitClient.getTransactionApiService(context).createTransaction(request)
