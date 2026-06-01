@@ -376,6 +376,7 @@ fun BerandaTabContent(
     modifier: Modifier = Modifier
 ) {
     val coroutineScope = rememberCoroutineScope()
+    val currentDate = java.text.SimpleDateFormat("EEEE, dd MMMM yyyy", java.util.Locale("id", "ID")).format(java.util.Date())
 
     val totalPenjualanHarian = transaksiList
         .filter { !it.namaItem.contains("[BATAL]", ignoreCase = true) }
@@ -449,7 +450,7 @@ fun BerandaTabContent(
 
         Spacer(modifier = Modifier.height(24.dp))
         Text(
-            text = "Kamis, 21 Mei 2026",
+            text = currentDate,
             style = MaterialTheme.typography.labelMedium,
             color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f)
         )
@@ -611,6 +612,7 @@ fun PenjualanTabContent(
     onNavigateToSales: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val currentDate = java.text.SimpleDateFormat("EEEE, dd MMMM yyyy", java.util.Locale("id", "ID")).format(java.util.Date())
     var showActionChooser by remember { mutableStateOf(false) }
     var showAddForm by remember { mutableStateOf(false) }
     var showAddMenuForm by remember { mutableStateOf(false) }
@@ -680,7 +682,7 @@ fun PenjualanTabContent(
                 fontWeight = FontWeight.Bold
             )
             Text(
-                text = "Kamis, 21 Mei 2026",
+                text = currentDate,
                 style = MaterialTheme.typography.labelMedium,
                 color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f)
             )
@@ -2103,6 +2105,7 @@ fun LabaRugiTabContent(
     modifier: Modifier = Modifier
 ) {
     val context = androidx.compose.ui.platform.LocalContext.current
+    val currentMonthYear = java.text.SimpleDateFormat("MMMM yyyy", java.util.Locale("id", "ID")).format(java.util.Date())
     var selectedLabaDateFilter by remember { mutableStateOf("Bulan Ini") }
     val labaDateFilters = listOf("Hari Ini", "Minggu Ini", "Bulan Ini", "Bulan Lalu", "Semua")
 
@@ -2434,7 +2437,7 @@ fun LabaRugiTabContent(
         ) {
             Column(modifier = Modifier.padding(16.dp)) {
                 Text(
-                    text = "Mei 2026",
+                    text = currentMonthYear,
                     style = MaterialTheme.typography.titleSmall,
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.primary,
