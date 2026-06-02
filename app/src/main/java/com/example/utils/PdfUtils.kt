@@ -292,6 +292,24 @@ fun generateMenuCetakPdf(context: Context, menuList: List<MenuItem>) {
     val headerTable = Table(UnitValue.createPercentArray(floatArrayOf(70f, 30f))).useAllAvailableWidth()
     
     val titleCell = Cell().setBorder(com.itextpdf.layout.borders.Border.NO_BORDER)
+    
+    val logoManager = LogoManager(context)
+    val logoPath = logoManager.getLogoPath()
+    if (logoPath != null) {
+        try {
+            val imageData = ImageDataFactory.create(logoPath)
+            val logoImage = Image(imageData)
+            logoImage.setWidth(60f)
+            logoImage.setHeight(60f)
+            logoImage.setBorderRadius(BorderRadius(100f))
+            
+            titleCell.add(logoImage)
+            titleCell.add(Paragraph("\n"))
+        } catch (e: Exception) {
+            // Ignore if logo loading fails
+        }
+    }
+
     titleCell.add(Paragraph("DAFTAR HARGA").setBold().setFontSize(16f))
     titleCell.add(Paragraph("MAKANAN DAN MINUMAN").setBold().setFontSize(14f))
     headerTable.addCell(titleCell)
