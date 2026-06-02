@@ -126,7 +126,10 @@ class SalesViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun processTransaction(diskonPersen: Double = 0.0, diskonNominal: Long = 0L, totalSetelahDiskon: Long = totalHarga, paymentMethod: String = "Cash"): Transaction {
-        val kode = "TRX-${SimpleDateFormat("yyyyMMdd-HHmmss", Locale.getDefault()).format(Date())}"
+        val dateNow = Date()
+        val dateStr = SimpleDateFormat("yyyyMMdd", Locale.getDefault()).format(dateNow)
+        val timeStr = SimpleDateFormat("HHmmss", Locale.getDefault()).format(dateNow)
+        val kode = "TRX-$dateStr$timeStr"
         val transaction = Transaction(
             kodeTransaksi = kode,
             tanggalTransaksi = System.currentTimeMillis(),

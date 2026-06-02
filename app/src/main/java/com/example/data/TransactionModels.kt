@@ -29,7 +29,14 @@ data class TransactionRequest(
     val waktu: String?,
     val dicatatOleh: String?,
     val payment_method: String? = null,
-    val items: List<com.example.ui.screens.TransaksiHarian>
+    val items: List<TransactionItemRequest>
+)
+
+data class TransactionItemRequest(
+    val namaItem: String,
+    val jumlah: Int,
+    val harga: Double,
+    val catatan: String = ""
 )
 
 data class CancelTransactionRequest(

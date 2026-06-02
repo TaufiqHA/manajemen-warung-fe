@@ -120,8 +120,9 @@ class LocalStorageHelper(private val context: Context) {
 
         // 2. Add to flat TransaksiHarian list for Dashboard/LabaRugi
         val currentFlat = getTransaksiList().toMutableList()
-        val formatter = java.text.SimpleDateFormat("HH:mm", java.util.Locale.getDefault())
-        val timeStr = formatter.format(java.util.Date(transaction.tanggalTransaksi))
+        val apiFormatter = java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'", java.util.Locale.getDefault())
+        apiFormatter.timeZone = java.util.TimeZone.getTimeZone("UTC")
+        val timeStr = apiFormatter.format(java.util.Date(transaction.tanggalTransaksi))
         
         val newFlatItems = mutableListOf<TransaksiHarian>()
         transaction.items.forEach { item ->
@@ -145,12 +146,20 @@ class LocalStorageHelper(private val context: Context) {
         @kotlin.OptIn(kotlinx.coroutines.DelicateCoroutinesApi::class)
         kotlinx.coroutines.GlobalScope.launch(kotlinx.coroutines.Dispatchers.IO) {
             try {
+                val apiItems = newFlatItems.map { 
+                    com.example.data.TransactionItemRequest(
+                        namaItem = it.namaItem,
+                        jumlah = it.jumlah,
+                        harga = it.harga,
+                        catatan = it.catatan
+                    )
+                }
                 val request = com.example.data.TransactionRequest(
                     idTransaksi = transaction.kodeTransaksi,
                     waktu = timeStr,
                     dicatatOleh = "Admin Toko",
                     payment_method = paymentMethod.uppercase(),
-                    items = newFlatItems
+                    items = apiItems
                 )
                 com.example.data.api.RetrofitClient.getTransactionApiService(context).createTransaction(request)
             } catch (e: java.lang.Exception) {}

@@ -806,7 +806,14 @@ fun PenjualanTabContent(
                                     val date = parser.parse(rawTime)
                                     if (date != null) formatter.format(date) else rawTime
                                 } catch (e2: Exception) {
-                                    rawTime
+                                    try {
+                                        val parser = java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'", java.util.Locale.getDefault())
+                                        val formatter = java.text.SimpleDateFormat("dd MMM yyyy, HH:mm", java.util.Locale.getDefault())
+                                        val date = parser.parse(rawTime)
+                                        if (date != null) formatter.format(date) else rawTime
+                                    } catch (e3: Exception) {
+                                        rawTime
+                                    }
                                 }
                             }
                             val cashier = itemsInTrx.firstOrNull()?.dicatatOleh ?: ""
@@ -1226,44 +1233,45 @@ fun PenjualanTabContent(
 
                             // Dynamic registration
                             val uniqueId = (transaksiList.size + 1).toString()
-                            val trxId = "TRX-20260521-00" + (transaksiList.distinctBy { it.idTransaksi }.size + 1)
+                            val dateNow = java.util.Date()
+                            val idFormatter = java.text.SimpleDateFormat("yyyyMMddHHmmss", java.util.Locale.getDefault())
+                            val trxId = "TRX-${idFormatter.format(dateNow)}"
+
+                            val apiFormatter = java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'", java.util.Locale.getDefault())
+                            apiFormatter.timeZone = java.util.TimeZone.getTimeZone("UTC")
+                            val waktuIso = apiFormatter.format(dateNow)
+
                             val newTrx = TransaksiHarian(
                                      idTransaksi = trxId,
                                      id = uniqueId,
                                      namaItem = namaItem,
                                      jumlah = qty.toIntOrNull() ?: 1,
                                      harga = priceValue,
-                                     waktu = "10:30",
+                                     waktu = waktuIso, // Format yang benar
                                      dicatatOleh = role,
                                      catatan = catatan
                                  )
                                  coroutineScope.launch {
                                      try {
+                                         val apiItem = com.example.data.TransactionItemRequest(
+                                             namaItem = newTrx.namaItem,
+                                             jumlah = newTrx.jumlah,
+                                             harga = newTrx.harga,
+                                             catatan = newTrx.catatan
+                                         )
                                          val request = com.example.data.TransactionRequest(
                                              idTransaksi = newTrx.idTransaksi,
                                              waktu = newTrx.waktu,
                                              dicatatOleh = newTrx.dicatatOleh,
                                              payment_method = "CASH",
-                                             items = listOf(newTrx)
+                                             items = listOf(apiItem)
                                          )
                                          com.example.data.api.RetrofitClient.getTransactionApiService(mContext).createTransaction(request)
                                      } catch (e: Exception) {}
                                  }
                                  transaksiList.add(newTrx)
-                                 if (false) transaksiList.add(
-                                TransaksiHarian(
-                                    idTransaksi = trxId,
-                                    id = uniqueId,
-                                    namaItem = namaItem,
-                                    jumlah = qty.toIntOrNull() ?: 1,
-                                    harga = priceValue,
-                                    waktu = "10:30",
-                                    dicatatOleh = role,
-                                    catatan = catatan
-                                )
-                            )
-                            showAddForm = false
-                        }
+                                 showAddForm = false
+                             }
                     ) {
                         Text("SIMPAN")
                     }

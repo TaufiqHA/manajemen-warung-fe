@@ -55,12 +55,19 @@ class ReportViewModel(application: Application) : AndroidViewModel(application) 
                     val grouped = apiFlatTrx.groupBy { it.idTransaksi }
                     val transactions = grouped.map { (trxId, items) ->
                         val firstItem = items.firstOrNull()
-                        val formatter = java.text.SimpleDateFormat("yyyyMMdd-HHmmss", java.util.Locale.getDefault())
+                        val formatter = java.text.SimpleDateFormat("yyyyMMddHHmmss", java.util.Locale.getDefault())
                         val dateLong = try {
                             val cleanId = trxId.substringAfter("TRX-")
+                            // Try parsing with new format, or fallback to old if needed
                             formatter.parse(cleanId)?.time ?: System.currentTimeMillis()
                         } catch (e: Exception) {
-                            System.currentTimeMillis()
+                            try {
+                                val oldFormatter = java.text.SimpleDateFormat("yyyyMMdd-HHmmss", java.util.Locale.getDefault())
+                                val cleanId = trxId.substringAfter("TRX-")
+                                oldFormatter.parse(cleanId)?.time ?: System.currentTimeMillis()
+                            } catch (e2: Exception) {
+                                System.currentTimeMillis()
+                            }
                         }
                         
                         val trxItems = items.map {
