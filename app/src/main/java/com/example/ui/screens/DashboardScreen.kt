@@ -1292,7 +1292,20 @@ fun PenjualanTabContent(
                 title = "Hapus Transaksi?",
                 text = "Seluruh item pada Transaksi $trxId senilai ${formatRupiah(totalValue)} akan dihapus.",
                 onConfirm = {
-                    transaksiList.removeAll(itemsToDelete)
+                    coroutineScope.launch {
+                        try {
+                            val response = com.example.data.api.RetrofitClient.getTransactionApiService(mContext)
+                                .deleteTransaction(trxId)
+                            if (response.isSuccessful) {
+                                transaksiList.removeAll(itemsToDelete)
+                                snackbarHostState.showSnackbar("Transaksi berhasil dihapus secara permanen")
+                            } else {
+                                snackbarHostState.showSnackbar("Gagal menghapus: Anda mungkin tidak memiliki akses (Admin)")
+                            }
+                        } catch (e: Exception) {
+                            snackbarHostState.showSnackbar("Error jaringan: ${e.localizedMessage ?: "Tidak dapat menghubungi server"}")
+                        }
+                    }
                     transactionIdToDelete = null
                 },
                 onDismiss = { transactionIdToDelete = null }

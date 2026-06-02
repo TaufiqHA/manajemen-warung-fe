@@ -17,6 +17,11 @@ class MainActivity : ComponentActivity() {
   override fun onCreate(savedInstanceState: Bundle?) {
     super.onCreate(savedInstanceState)
     enableEdgeToEdge()
+
+    // Trigger auto-sync saat aplikasi dibuka
+    val localStorage = com.example.utils.LocalStorageHelper(this)
+    localStorage.syncUnsyncedData()
+
     setContent {
       MyApplicationTheme {
         Surface(
