@@ -195,7 +195,29 @@ fun DashboardScreen(
     var activeTab by remember { mutableStateOf(DashboardTab.Beranda) }
     val context = androidx.compose.ui.platform.LocalContext.current
     val storageHelper = remember { com.example.utils.LocalStorageHelper(context) }
+    val tokenManager = remember { com.example.utils.TokenManager(context) }
+    val userRepository = remember { com.example.data.repository.UserRepository(context) }
     val mContext = context
+    
+    // Role parameters
+    var userName by remember { 
+        mutableStateOf(
+            tokenManager.getUserDisplayName() ?: when (role) {
+                UserRole.OWNER -> "Budi Santoso"
+                UserRole.ADMIN_KANTOR -> "Andi Kantor"
+                else -> "Siti Aminah"
+            }
+        ) 
+    }
+    var userEmail by remember {
+        mutableStateOf(
+            when (role) {
+                UserRole.OWNER -> "owner@warung.com"
+                UserRole.ADMIN_KANTOR -> "adminkantor@warung.com"
+                else -> "admin@warung.com"
+            }
+        )
+    }
     
     // Live State Lists for local mockup persistence
     val menuList = remember {
@@ -231,6 +253,35 @@ fun DashboardScreen(
 
     LaunchedEffect(Unit) {
         try {
+            val response = com.example.data.api.RetrofitClient.getUserApiService(mContext).getCurrentUser()
+            if (response.isSuccessful && response.body() != null) {
+                val userResponse = response.body()!!
+                // Pastikan menggunakan properti 'user' jika UserResponse membungkusnya, 
+                // atau sesuaikan dengan struktur API terbaru (data.name)
+                val fetchedUser = userResponse.user 
+                
+                if (fetchedUser.name.isNotEmpty()) {
+                    userName = fetchedUser.name
+                }
+                if (fetchedUser.email.isNotEmpty()) {
+                    userEmail = fetchedUser.email
+                }
+                
+                // Simpan ke local storage agar saat buka app lagi tidak kedip nama default
+                tokenManager.saveUser(
+                    fetchedUser.id,
+                    fetchedUser.name,
+                    fetchedUser.username,
+                    fetchedUser.role.name
+                )
+            }
+        } catch (e: Exception) {
+            // Biarkan kosong / ignore agar jika terjadi gangguan jaringan,
+            // tidak mengganggu proses load data transaksi dan biaya.
+            android.util.Log.e("FetchUser", "Gagal mengambil data user: ${e.message}")
+        }
+
+        try {
             val response = com.example.data.api.RetrofitClient.getProductApiService(mContext).getProducts()
             if (response.isSuccessful && response.body()?.data != null) {
                 menuList.clear()
@@ -253,22 +304,6 @@ fun DashboardScreen(
                 biayaList.addAll(response.body()!!.data!!)
             }
         } catch (e: Exception) {}
-    }
-
-    // Role parameters
-    var userName by remember { 
-        mutableStateOf(
-            when (role) {
-                UserRole.OWNER -> "Budi Santoso"
-                UserRole.ADMIN_KANTOR -> "Andi Kantor"
-                else -> "Siti Aminah"
-            }
-        ) 
-    }
-    val userEmail = when (role) {
-        UserRole.OWNER -> "owner@warung.com"
-        UserRole.ADMIN_KANTOR -> "adminkantor@warung.com"
-        else -> "admin@warung.com"
     }
 
     // UI Feedback Overlay (Toast-like snackbars)
@@ -355,7 +390,19 @@ fun DashboardScreen(
                         userRole = role,
                         userEmail = userEmail,
                         onLogoutClick = onLogout,
-                        onNameChange = { userName = it },
+                        onNameChange = { newName -> 
+                            coroutineScope.launch {
+                                userRepository.updateProfile(newName)
+                                    .onSuccess {
+                                        userName = newName
+                                        snackbarHostState.showSnackbar("Nama profil berhasil diupdate")
+                                    }
+                                    .onFailure { e ->
+                                        android.util.Log.e("UpdateProfile", "Error update name: ${e.message}", e)
+                                        snackbarHostState.showSnackbar(e.message ?: "Gagal menyimpan ke server")
+                                    }
+                            }
+                        },
                         onNavigateToSettings = onNavigateToSettings
                     )
                 }

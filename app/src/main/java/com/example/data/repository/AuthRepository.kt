@@ -21,7 +21,12 @@ class AuthRepository(private val context: Context) {
                 if (baseResponse.success && baseResponse.data != null) {
                     val loginResponse = baseResponse.data
                     tokenManager.saveToken(loginResponse.token)
-                    tokenManager.saveUser(loginResponse.user.id, loginResponse.user.username, loginResponse.user.role.name)
+                    tokenManager.saveUser(
+                        loginResponse.user.id,
+                        loginResponse.user.name,
+                        loginResponse.user.username,
+                        loginResponse.user.role.name
+                    )
                     Result.success(loginResponse)
                 } else {
                     Result.failure(Exception(baseResponse.message ?: "Login gagal, data tidak ditemukan"))

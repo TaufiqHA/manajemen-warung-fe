@@ -22,6 +22,14 @@ object PrinterHelper {
             outputStream.write("\n\n\n".toByteArray())
             
             outputStream.flush()
+            
+            // Tambahkan jeda waktu agar printer sempat memproses buffer sebelum socket ditutup
+            try {
+                Thread.sleep(1500)
+            } catch (e: InterruptedException) {
+                e.printStackTrace()
+            }
+            
             socket.close()
             true
         } catch (e: Exception) {
