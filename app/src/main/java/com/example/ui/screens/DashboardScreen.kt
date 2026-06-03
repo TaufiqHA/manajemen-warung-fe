@@ -1427,7 +1427,56 @@ fun PenjualanTabContent(
                     ) {
                         TextButton(
                             onClick = {
-                                val transaction = storageHelper.getNestedTransactions().find { it.kodeTransaksi == item.idTransaksi }
+                                var transaction = storageHelper.getNestedTransactions().find { it.kodeTransaksi == item.idTransaksi }
+                                
+                                if (transaction == null) {
+                                    // Rekonstruksi dari transaksiList (data API)
+                                    val relatedItems = transaksiList.filter { it.idTransaksi == item.idTransaksi }
+                                    if (relatedItems.isNotEmpty()) {
+                                        val firstItem = relatedItems.first()
+                                        val rawTime = firstItem.waktu
+                                        
+                                        val timestamp = try {
+                                            if (rawTime.contains("T")) {
+                                                val formats = listOf(
+                                                    "yyyy-MM-dd'T'HH:mm:ss.SSSSSS'Z'",
+                                                    "yyyy-MM-dd'T'HH:mm:ss.SSS'Z'",
+                                                    "yyyy-MM-dd'T'HH:mm:ss'Z'"
+                                                )
+                                                var parsedDate: java.util.Date? = null
+                                                for (fmt in formats) {
+                                                    try {
+                                                        val parser = java.text.SimpleDateFormat(fmt, java.util.Locale.getDefault())
+                                                        parser.timeZone = java.util.TimeZone.getTimeZone("UTC")
+                                                        parsedDate = parser.parse(rawTime)
+                                                        if (parsedDate != null) break
+                                                    } catch (e: Exception) {}
+                                                }
+                                                parsedDate?.time ?: System.currentTimeMillis()
+                                            } else {
+                                                rawTime.toLongOrNull() ?: System.currentTimeMillis()
+                                            }
+                                        } catch (e: Exception) {
+                                            System.currentTimeMillis()
+                                        }
+
+                                        transaction = com.example.data.Transaction(
+                                            kodeTransaksi = item.idTransaksi,
+                                            tanggalTransaksi = timestamp,
+                                            items = relatedItems.map { 
+                                                com.example.data.TransactionItem(
+                                                    itemId = it.id,
+                                                    namaBarang = it.namaItem,
+                                                    qty = it.jumlah,
+                                                    harga = it.harga.toLong()
+                                                )
+                                            },
+                                            totalHarga = relatedItems.sumOf { (it.jumlah * it.harga).toLong() },
+                                            totalSetelahDiskon = relatedItems.sumOf { (it.jumlah * it.harga).toLong() }
+                                        )
+                                    }
+                                }
+
                                 if (transaction != null) {
                                     currentTransaction = transaction
                                     receiptText = salesViewModel.formatReceipt(transaction)
