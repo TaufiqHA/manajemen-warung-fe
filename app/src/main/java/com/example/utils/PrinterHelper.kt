@@ -2,6 +2,7 @@ package com.example.utils
 
 import android.annotation.SuppressLint
 import android.bluetooth.BluetoothDevice
+import java.net.Socket
 import java.util.UUID
 
 object PrinterHelper {
@@ -30,6 +31,31 @@ object PrinterHelper {
                 e.printStackTrace()
             }
             
+            socket.close()
+            true
+        } catch (e: Exception) {
+            e.printStackTrace()
+            false
+        }
+    }
+
+    /**
+     * Mencetak struk ke printer thermal melalui jaringan (Network/LAN).
+     * Digunakan juga untuk simulasi ke Virtual Thermal Printer.
+     */
+    fun printToNetwork(ipAddress: String, port: Int, receiptText: String): Boolean {
+        return try {
+            val socket = Socket(ipAddress, port)
+            socket.soTimeout = 5000 // Timeout 5 detik
+            val outputStream = socket.getOutputStream()
+            
+            // Kirim teks struk
+            outputStream.write(receiptText.toByteArray())
+            
+            // Tambahkan baris baru (feed paper)
+            outputStream.write("\n\n\n".toByteArray())
+            
+            outputStream.flush()
             socket.close()
             true
         } catch (e: Exception) {

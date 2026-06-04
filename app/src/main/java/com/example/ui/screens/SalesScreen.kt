@@ -88,6 +88,10 @@ fun SalesScreen(
     var showPrinterDialog by remember { mutableStateOf(false) }
     var pairedDevicesList by remember { mutableStateOf<List<BluetoothDevice>>(emptyList()) }
 
+    // State untuk Virtual Thermal Printer (Simulasi Network)
+    var showNetworkPrinterDialog by remember { mutableStateOf(false) }
+    var networkPrinterIp by remember { mutableStateOf(sharedPrefs.getString("last_network_ip", "10.0.2.2") ?: "10.0.2.2") }
+
     val permissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestMultiplePermissions()
     ) { permissions ->
@@ -418,6 +422,7 @@ fun SalesScreen(
             },
             dismissButton = {
                 Row(
+                    modifier = Modifier.horizontalScroll(rememberScrollState()),
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
@@ -445,6 +450,16 @@ fun SalesScreen(
                         Spacer(modifier = Modifier.width(8.dp))
                         Text("Export PDF")
                     }
+
+/*
+                    TextButton(onClick = {
+                        showNetworkPrinterDialog = true
+                    }) {
+                        Icon(AppIcons.Print, contentDescription = null, tint = MaterialTheme.colorScheme.secondary)
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("Simulasi", color = MaterialTheme.colorScheme.secondary)
+                    }
+*/
 
                     TextButton(onClick = {
                         checkBluetoothAndPrint {
@@ -539,4 +554,47 @@ fun SalesScreen(
             }
         )
     }
+
+/*
+    if (showNetworkPrinterDialog) {
+        AlertDialog(
+            onDismissRequest = { showNetworkPrinterDialog = false },
+            title = { Text("Simulasi Virtual Printer") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("Masukkan IP Komputer yang menjalankan Virtual Printer (Port 9100)", style = MaterialTheme.typography.bodySmall)
+                    OutlinedTextField(
+                        value = networkPrinterIp,
+                        onValueChange = { networkPrinterIp = it },
+                        label = { Text("IP Address") },
+                        placeholder = { Text("Contoh: 192.168.1.x atau 10.0.2.2") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    Text("Pastikan HP & Komputer satu jaringan Wi-Fi.", style = MaterialTheme.typography.labelSmall, color = Color.Gray)
+                }
+            },
+            confirmButton = {
+                Button(onClick = {
+                    showNetworkPrinterDialog = false
+                    sharedPrefs.edit().putString("last_network_ip", networkPrinterIp).apply()
+                    Toast.makeText(context, "Mencetak ke $networkPrinterIp:9100...", Toast.LENGTH_SHORT).show()
+                    viewModel.printToNetwork(networkPrinterIp, 9100, receiptText) { success ->
+                        val message = if (success) "Struk berhasil dikirim ke Virtual Printer" else "Gagal terhubung ke Virtual Printer"
+                        (context as? android.app.Activity)?.runOnUiThread {
+                            Toast.makeText(context, message, Toast.LENGTH_LONG).show()
+                        }
+                    }
+                }) {
+                    Text("Cetak Simulasi")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showNetworkPrinterDialog = false }) {
+                    Text("Batal")
+                }
+            }
+        )
+    }
+*/
 }

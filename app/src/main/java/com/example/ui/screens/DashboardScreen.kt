@@ -7,10 +7,12 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -38,6 +40,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Check
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.ui.viewmodel.SalesViewModel
 import android.bluetooth.BluetoothAdapter
@@ -682,6 +685,10 @@ fun PenjualanTabContent(
     val bluetoothAdapter = remember { BluetoothAdapter.getDefaultAdapter() }
     var showPrinterDialog by remember { mutableStateOf(false) }
     var pairedDevicesList by remember { mutableStateOf<List<BluetoothDevice>>(emptyList()) }
+
+    // State untuk Virtual Thermal Printer (Simulasi Network)
+    var showNetworkPrinterDialog by remember { mutableStateOf(false) }
+    var networkPrinterIp by remember { mutableStateOf(sharedPrefs.getString("last_network_ip", "10.0.2.2") ?: "10.0.2.2") }
 
     val permissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestMultiplePermissions()
@@ -1535,6 +1542,7 @@ fun PenjualanTabContent(
                 },
                 dismissButton = {
                     Row(
+                        modifier = Modifier.horizontalScroll(rememberScrollState()),
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
@@ -1562,6 +1570,16 @@ fun PenjualanTabContent(
                             Spacer(modifier = Modifier.width(8.dp))
                             Text("Export PDF")
                         }
+
+/*
+                        TextButton(onClick = {
+                            showNetworkPrinterDialog = true
+                        }) {
+                            Icon(AppIcons.Print, contentDescription = null, tint = MaterialTheme.colorScheme.secondary)
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text("Simulasi", color = MaterialTheme.colorScheme.secondary)
+                        }
+*/
 
                         TextButton(onClick = {
                             checkBluetoothAndPrint {
@@ -1654,6 +1672,49 @@ fun PenjualanTabContent(
                 }
             )
         }
+
+/*
+        if (showNetworkPrinterDialog) {
+            AlertDialog(
+                onDismissRequest = { showNetworkPrinterDialog = false },
+                title = { Text("Simulasi Virtual Printer") },
+                text = {
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text("Masukkan IP Komputer yang menjalankan Virtual Printer (Port 9100)", style = MaterialTheme.typography.bodySmall)
+                        OutlinedTextField(
+                            value = networkPrinterIp,
+                            onValueChange = { networkPrinterIp = it },
+                            label = { Text("IP Address") },
+                            placeholder = { Text("Contoh: 192.168.1.x atau 10.0.2.2") },
+                            singleLine = true,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                        Text("Pastikan HP & Komputer satu jaringan Wi-Fi.", style = MaterialTheme.typography.labelSmall, color = Color.Gray)
+                    }
+                },
+                confirmButton = {
+                    Button(onClick = {
+                        showNetworkPrinterDialog = false
+                        sharedPrefs.edit().putString("last_network_ip", networkPrinterIp).apply()
+                        Toast.makeText(context, "Mencetak ke $networkPrinterIp:9100...", Toast.LENGTH_SHORT).show()
+                        salesViewModel.printToNetwork(networkPrinterIp, 9100, receiptText) { success ->
+                            val message = if (success) "Struk berhasil dikirim ke Virtual Printer" else "Gagal terhubung ke Virtual Printer"
+                            (context as? android.app.Activity)?.runOnUiThread {
+                                Toast.makeText(context, message, Toast.LENGTH_LONG).show()
+                            }
+                        }
+                    }) {
+                        Text("Cetak Simulasi")
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { showNetworkPrinterDialog = false }) {
+                        Text("Batal")
+                    }
+                }
+            )
+        }
+*/
 
         showCancelConfirmation?.let { cancelItem ->
             ConfirmDialog(
@@ -2848,6 +2909,9 @@ fun BarangTabContent(
     val allCategories = (existingCategories + customCategories).distinct()
     var showAddKategoriModal by remember { mutableStateOf(false) }
     var newKategoriName by remember { mutableStateOf("") }
+    var showPdfSettingsDialog by remember { mutableStateOf(false) }
+    var pdfCategoryOrder by remember { mutableStateOf(listOf<String>()) }
+    var editableMenuList by remember { mutableStateOf(listOf<MenuItem>()) }
 
     val context = androidx.compose.ui.platform.LocalContext.current
     val mContext = context
@@ -2871,7 +2935,9 @@ fun BarangTabContent(
                     fontWeight = FontWeight.Bold
                 )
                 IconButton(onClick = { 
-                    com.example.utils.generateMenuCetakPdf(context, menuList) 
+                    editableMenuList = menuList.map { it.copy() }
+                    pdfCategoryOrder = editableMenuList.map { it.kategori }.distinct().filter { it.isNotBlank() }
+                    showPdfSettingsDialog = true 
                 }) {
                     Icon(
                         imageVector = AppIcons.Pdf, 
@@ -3222,6 +3288,146 @@ fun BarangTabContent(
                 },
                 dismissButton = {
                     TextButton(onClick = { showAddKategoriModal = false }) {
+                        Text("Batal")
+                    }
+                }
+            )
+        }
+        if (showPdfSettingsDialog) {
+            var categoryToEditIndex by remember { mutableStateOf<Int?>(null) }
+            var editCategoryNameText by remember { mutableStateOf("") }
+
+            AlertDialog(
+                onDismissRequest = { showPdfSettingsDialog = false },
+                title = { Text("Atur Urutan & Nama Kategori PDF") },
+                text = {
+                    Column(
+                        modifier = Modifier.fillMaxWidth().heightIn(max = 400.dp),
+                        verticalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        Text(
+                            text = "Geser urutan kategori menggunakan tombol panah, atau edit nama kategori dengan tombol edit.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = Color.Gray
+                        )
+                        
+                        LazyColumn(
+                            verticalArrangement = Arrangement.spacedBy(8.dp),
+                            modifier = Modifier.weight(1f).fillMaxWidth()
+                        ) {
+                            itemsIndexed(pdfCategoryOrder) { index, category ->
+                                Card(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
+                                ) {
+                                    Row(
+                                        modifier = Modifier.padding(8.dp).fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        if (categoryToEditIndex == index) {
+                                            Row(
+                                                modifier = Modifier.weight(1f),
+                                                verticalAlignment = Alignment.CenterVertically
+                                            ) {
+                                                OutlinedTextField(
+                                                    value = editCategoryNameText,
+                                                    onValueChange = { editCategoryNameText = it },
+                                                    modifier = Modifier.weight(1f),
+                                                    singleLine = true,
+                                                    textStyle = MaterialTheme.typography.bodyMedium
+                                                )
+                                                IconButton(onClick = {
+                                                    if (editCategoryNameText.isNotBlank() && editCategoryNameText != category) {
+                                                        val newList = pdfCategoryOrder.toMutableList()
+                                                        newList[index] = editCategoryNameText
+                                                        pdfCategoryOrder = newList
+                                                        
+                                                        editableMenuList = editableMenuList.map { item ->
+                                                            if (item.kategori == category) {
+                                                                item.copy(kategori = editCategoryNameText)
+                                                            } else {
+                                                                item
+                                                            }
+                                                        }
+                                                    }
+                                                    categoryToEditIndex = null
+                                                }) {
+                                                    Icon(
+                                                        imageVector = Icons.Filled.Check,
+                                                        contentDescription = "Simpan",
+                                                        tint = MaterialTheme.colorScheme.primary
+                                                    )
+                                                }
+                                            }
+                                        } else {
+                                            Text(
+                                                text = category,
+                                                style = MaterialTheme.typography.bodyMedium,
+                                                fontWeight = FontWeight.Bold,
+                                                modifier = Modifier.weight(1f).padding(start = 8.dp)
+                                            )
+                                            
+                                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                                IconButton(onClick = {
+                                                    categoryToEditIndex = index
+                                                    editCategoryNameText = category
+                                                }) {
+                                                    Icon(
+                                                        imageVector = AppIcons.Edit,
+                                                        contentDescription = "Edit Kategori",
+                                                        tint = MaterialTheme.colorScheme.secondary,
+                                                        modifier = Modifier.size(20.dp)
+                                                    )
+                                                }
+                                                IconButton(
+                                                    onClick = {
+                                                        if (index > 0) {
+                                                            val newList = pdfCategoryOrder.toMutableList()
+                                                            java.util.Collections.swap(newList, index, index - 1)
+                                                            pdfCategoryOrder = newList
+                                                        }
+                                                    },
+                                                    enabled = index > 0
+                                                ) {
+                                                    Icon(
+                                                        imageVector = Icons.Filled.KeyboardArrowUp,
+                                                        contentDescription = "Naikkan"
+                                                    )
+                                                }
+                                                IconButton(
+                                                    onClick = {
+                                                        if (index < pdfCategoryOrder.size - 1) {
+                                                            val newList = pdfCategoryOrder.toMutableList()
+                                                            java.util.Collections.swap(newList, index, index + 1)
+                                                            pdfCategoryOrder = newList
+                                                        }
+                                                    },
+                                                    enabled = index < pdfCategoryOrder.size - 1
+                                                ) {
+                                                    Icon(
+                                                        imageVector = Icons.Filled.KeyboardArrowDown,
+                                                        contentDescription = "Turunkan"
+                                                    )
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                },
+                confirmButton = {
+                    Button(onClick = {
+                        com.example.utils.generateMenuCetakPdf(context, editableMenuList, pdfCategoryOrder)
+                        showPdfSettingsDialog = false
+                    }) {
+                        Text("Export PDF")
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { showPdfSettingsDialog = false }) {
                         Text("Batal")
                     }
                 }

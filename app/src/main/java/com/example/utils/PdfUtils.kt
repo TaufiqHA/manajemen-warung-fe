@@ -281,7 +281,7 @@ fun generateLabaRugiPdf(context: Context, transaksiList: List<TransaksiHarian>, 
     openPdfFile(context, file)
 }
 
-fun generateMenuCetakPdf(context: Context, menuList: List<MenuItem>) {
+fun generateMenuCetakPdf(context: Context, menuList: List<MenuItem>, categoryOrder: List<String>) {
     val fileName = "Menu_Pemesanan_${System.currentTimeMillis()}.pdf"
     val file = File(context.getExternalFilesDir(Environment.DIRECTORY_DOCUMENTS), fileName)
     val writer = PdfWriter(FileOutputStream(file))
@@ -366,13 +366,13 @@ fun generateMenuCetakPdf(context: Context, menuList: List<MenuItem>) {
     }
 
     // Membagi jumlah kategori menjadi dua bagian (kiri dan kanan)
-    val keys = groupedMenu.keys.toList()
+    val keys = (categoryOrder.filter { it in groupedMenu } + groupedMenu.keys.filter { it !in categoryOrder }).distinct()
     val midKeyIndex = (keys.size + 1) / 2
     val leftKeys = keys.take(midKeyIndex)
     val rightKeys = keys.drop(midKeyIndex)
 
-    val leftGroup = groupedMenu.filterKeys { it in leftKeys }
-    val rightGroup = groupedMenu.filterKeys { it in rightKeys }
+    val leftGroup = leftKeys.associateWith { groupedMenu[it] ?: emptyList() }
+    val rightGroup = rightKeys.associateWith { groupedMenu[it] ?: emptyList() }
 
     val leftCell = Cell().add(createKolomMenu(leftGroup)).setBorder(com.itextpdf.layout.borders.Border.NO_BORDER)
     val gapCell = Cell().setBorder(com.itextpdf.layout.borders.Border.NO_BORDER)
