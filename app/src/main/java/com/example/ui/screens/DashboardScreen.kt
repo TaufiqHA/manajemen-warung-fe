@@ -2912,6 +2912,7 @@ fun BarangTabContent(
     var showPdfSettingsDialog by remember { mutableStateOf(false) }
     var pdfCategoryOrder by remember { mutableStateOf(listOf<String>()) }
     var editableMenuList by remember { mutableStateOf(listOf<MenuItem>()) }
+    var isExportExcelMode by remember { mutableStateOf(false) }
 
     val context = androidx.compose.ui.platform.LocalContext.current
     val mContext = context
@@ -2934,16 +2935,36 @@ fun BarangTabContent(
                     style = MaterialTheme.typography.titleLarge,
                     fontWeight = FontWeight.Bold
                 )
-                IconButton(onClick = { 
-                    editableMenuList = menuList.map { it.copy() }
-                    pdfCategoryOrder = editableMenuList.map { it.kategori }.distinct().filter { it.isNotBlank() }
-                    showPdfSettingsDialog = true 
-                }) {
-                    Icon(
-                        imageVector = AppIcons.Pdf, 
-                        contentDescription = "Export PDF Menu", 
-                        tint = MaterialTheme.colorScheme.primary
-                    )
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    if (role == UserRole.ADMIN_TOKO.displayName || role == UserRole.OWNER.displayName) {
+                        IconButton(onClick = { 
+                            editableMenuList = menuList.map { it.copy() }
+                            pdfCategoryOrder = editableMenuList.map { it.kategori }.distinct().filter { it.isNotBlank() }
+                            isExportExcelMode = true
+                            showPdfSettingsDialog = true 
+                        }) {
+                            Icon(
+                                imageVector = AppIcons.Excel, 
+                                contentDescription = "Export Excel Menu", 
+                                tint = MaterialTheme.colorScheme.primary
+                            )
+                        }
+                    }
+                    IconButton(onClick = { 
+                        editableMenuList = menuList.map { it.copy() }
+                        pdfCategoryOrder = editableMenuList.map { it.kategori }.distinct().filter { it.isNotBlank() }
+                        isExportExcelMode = false
+                        showPdfSettingsDialog = true 
+                    }) {
+                        Icon(
+                            imageVector = AppIcons.Pdf, 
+                            contentDescription = "Export PDF Menu", 
+                            tint = MaterialTheme.colorScheme.primary
+                        )
+                    }
                 }
             }
 
@@ -3299,7 +3320,7 @@ fun BarangTabContent(
 
             AlertDialog(
                 onDismissRequest = { showPdfSettingsDialog = false },
-                title = { Text("Atur Urutan & Nama Kategori PDF") },
+                title = { Text(if (isExportExcelMode) "Atur Urutan & Nama Kategori Excel" else "Atur Urutan & Nama Kategori PDF") },
                 text = {
                     Column(
                         modifier = Modifier.fillMaxWidth().heightIn(max = 400.dp),
@@ -3420,10 +3441,14 @@ fun BarangTabContent(
                 },
                 confirmButton = {
                     Button(onClick = {
-                        com.example.utils.generateMenuCetakPdf(context, editableMenuList, pdfCategoryOrder)
+                        if (isExportExcelMode) {
+                            com.example.utils.generateMenuCetakExcel(context, editableMenuList, pdfCategoryOrder)
+                        } else {
+                            com.example.utils.generateMenuCetakPdf(context, editableMenuList, pdfCategoryOrder)
+                        }
                         showPdfSettingsDialog = false
                     }) {
-                        Text("Export PDF")
+                        Text(if (isExportExcelMode) "Export Excel" else "Export PDF")
                     }
                 },
                 dismissButton = {

@@ -35,6 +35,8 @@ object AppIcons {
     val Upload: ImageVector = Icons.Rounded.Upload
     val TrendingUp: ImageVector = Icons.Rounded.TrendingUp
     val Pdf: ImageVector = Icons.Rounded.PictureAsPdf
+    val Excel: ImageVector = Icons.Rounded.TableChart
+
 
     // Status
     val Success: ImageVector = Icons.Rounded.CheckCircle

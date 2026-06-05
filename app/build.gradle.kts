@@ -13,7 +13,7 @@ android {
 
   defaultConfig {
     applicationId = "com.aistudio.warungmakanan.pqrstw"
-    minSdk = 24
+    minSdk = 26
     targetSdk = 35
     versionCode = 1
     versionName = "1.0"
@@ -109,6 +109,8 @@ dependencies {
   implementation(libs.itext7.core)
   implementation(libs.ucrop)
   implementation(libs.coil.compose)
+  implementation(libs.poi.core)
+
   testImplementation(libs.androidx.compose.ui.test.junit4)
   testImplementation(libs.androidx.core)
   testImplementation(libs.androidx.junit)

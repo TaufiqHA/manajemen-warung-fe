@@ -16,11 +16,22 @@ object PrinterHelper {
             socket.connect()
             
             val outputStream = socket.outputStream
-            // Kirim teks struk (format sudah diatur persis seperti dialog)
-            outputStream.write(receiptText.toByteArray())
             
-            // Tambahkan baris baru di akhir agar gulungan kertas pas untuk disobek
-            outputStream.write("\n\n\n".toByteArray())
+            // 1. Kirim command inisialisasi ESC/POS (ESC @)
+            val initCommand = byteArrayOf(0x1B, 0x40)
+            outputStream.write(initCommand)
+            
+            // 2. Set perataan teks ke kiri (ESC a 0)
+            val alignLeftCommand = byteArrayOf(0x1B, 0x61, 0x00)
+            outputStream.write(alignLeftCommand)
+
+            // 3. Pastikan format baris baru dikenali printer (CRLF) lalu kirim
+            val formattedText = receiptText.replace("\n", "\r\n")
+            outputStream.write(formattedText.toByteArray())
+            
+            // 4. Tambahkan line feed (baris baru) yang cukup di akhir agar kertas bisa disobek
+            val feedCommand = byteArrayOf(0x0A, 0x0A, 0x0A, 0x0A)
+            outputStream.write(feedCommand)
             
             outputStream.flush()
             
@@ -49,11 +60,21 @@ object PrinterHelper {
             socket.soTimeout = 5000 // Timeout 5 detik
             val outputStream = socket.getOutputStream()
             
-            // Kirim teks struk
-            outputStream.write(receiptText.toByteArray())
+            // 1. Kirim command inisialisasi ESC/POS (ESC @)
+            val initCommand = byteArrayOf(0x1B, 0x40)
+            outputStream.write(initCommand)
             
-            // Tambahkan baris baru (feed paper)
-            outputStream.write("\n\n\n".toByteArray())
+            // 2. Set perataan teks ke kiri (ESC a 0)
+            val alignLeftCommand = byteArrayOf(0x1B, 0x61, 0x00)
+            outputStream.write(alignLeftCommand)
+
+            // 3. Pastikan format baris baru dikenali printer (CRLF) lalu kirim
+            val formattedText = receiptText.replace("\n", "\r\n")
+            outputStream.write(formattedText.toByteArray())
+            
+            // 4. Tambahkan line feed (baris baru) yang cukup di akhir agar kertas bisa disobek
+            val feedCommand = byteArrayOf(0x0A, 0x0A, 0x0A, 0x0A)
+            outputStream.write(feedCommand)
             
             outputStream.flush()
             socket.close()
