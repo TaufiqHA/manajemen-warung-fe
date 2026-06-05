@@ -1,5 +1,7 @@
 package com.example.ui.screens
 
+import android.content.Intent
+import android.net.Uri
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -2939,16 +2941,33 @@ fun BarangTabContent(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    if (role == UserRole.ADMIN_TOKO.displayName || role == UserRole.OWNER.displayName) {
-                        IconButton(onClick = { 
-                            editableMenuList = menuList.map { it.copy() }
-                            pdfCategoryOrder = editableMenuList.map { it.kategori }.distinct().filter { it.isNotBlank() }
-                            isExportExcelMode = true
-                            showPdfSettingsDialog = true 
+                    if (role == UserRole.ADMIN_TOKO.displayName || role == UserRole.OWNER.displayName || role == UserRole.ADMIN_KANTOR.displayName) {
+                        IconButton(onClick = {
+                            coroutineScope.launch {
+                                try {
+                                    Toast.makeText(mContext, "Memproses ekspor...", Toast.LENGTH_SHORT).show()
+                                    val response = com.example.data.api.RetrofitClient.getProductApiService(mContext).exportProducts()
+                                    if (response.isSuccessful && response.body()?.success == true) {
+                                        val downloadUrl = response.body()?.downloadUrl
+                                        if (!downloadUrl.isNullOrEmpty()) {
+                                            Toast.makeText(mContext, "Membuka tautan unduhan...", Toast.LENGTH_SHORT).show()
+                                            val intent = Intent(Intent.ACTION_VIEW, Uri.parse(downloadUrl))
+                                            mContext.startActivity(intent)
+                                        } else {
+                                            Toast.makeText(mContext, "URL Unduhan tidak ditemukan.", Toast.LENGTH_SHORT).show()
+                                        }
+                                    } else {
+                                        Toast.makeText(mContext, "Gagal mengekspor data: ${response.message()}", Toast.LENGTH_SHORT).show()
+                                    }
+                                } catch (e: Exception) {
+                                    e.printStackTrace()
+                                    Toast.makeText(mContext, "Terjadi kesalahan jaringan: ${e.message}", Toast.LENGTH_SHORT).show()
+                                }
+                            }
                         }) {
                             Icon(
-                                imageVector = AppIcons.Excel, 
-                                contentDescription = "Export Excel Menu", 
+                                imageVector = AppIcons.Excel,
+                                contentDescription = "Export Excel Menu",
                                 tint = MaterialTheme.colorScheme.primary
                             )
                         }
@@ -3441,10 +3460,16 @@ fun BarangTabContent(
                 },
                 confirmButton = {
                     Button(onClick = {
-                        if (isExportExcelMode) {
-                            com.example.utils.generateMenuCetakExcel(context, editableMenuList, pdfCategoryOrder)
-                        } else {
-                            com.example.utils.generateMenuCetakPdf(context, editableMenuList, pdfCategoryOrder)
+                        coroutineScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+                            try {
+                                if (isExportExcelMode) {
+                                    com.example.utils.generateMenuCetakExcel(context, editableMenuList, pdfCategoryOrder)
+                                } else {
+                                    com.example.utils.generateMenuCetakPdf(context, editableMenuList, pdfCategoryOrder)
+                                }
+                            } catch (e: Throwable) {
+                                e.printStackTrace()
+                            }
                         }
                         showPdfSettingsDialog = false
                     }) {

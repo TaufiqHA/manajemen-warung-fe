@@ -36,6 +36,7 @@ object AppIcons {
     val TrendingUp: ImageVector = Icons.Rounded.TrendingUp
     val Pdf: ImageVector = Icons.Rounded.PictureAsPdf
     val Excel: ImageVector = Icons.Rounded.TableChart
+    val CloudDownload: ImageVector = Icons.Rounded.CloudDownload
 
 
     // Status
