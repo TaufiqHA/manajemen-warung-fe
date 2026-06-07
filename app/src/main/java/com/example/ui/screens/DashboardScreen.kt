@@ -432,19 +432,24 @@ fun BerandaTabContent(
     val coroutineScope = rememberCoroutineScope()
     val currentDate = java.text.SimpleDateFormat("EEEE, dd MMMM yyyy", java.util.Locale("id", "ID")).format(java.util.Date())
 
-    val totalPenjualanHarian = transaksiList
+    // 1. Dapatkan string tanggal hari ini dengan format yyyyMMdd
+    val todayDateStr = java.text.SimpleDateFormat("yyyyMMdd", java.util.Locale.getDefault()).format(java.util.Date())
+
+    // 2. Filter transaksi agar hanya mengambil transaksi hari ini
+    val todayTransaksiList = transaksiList.filter { it.idTransaksi.startsWith("TRX-$todayDateStr") }
+
+    // 3. Hitung total pemasukan hari ini dari list yang sudah difilter
+    val totalPenjualanHarian = todayTransaksiList
         .filter { !it.namaItem.contains("[BATAL]", ignoreCase = true) }
         .sumOf { it.jumlah * it.harga }
 
-    // Kelompokkan berdasarkan idTransaksi untuk mendapatkan jumlah struk riil
-    val groupedTransactions = transaksiList.groupBy { it.idTransaksi }
+    // 4. Update grup transaksi agar juga menggunakan data hari ini saja
+    val groupedTransactions = todayTransaksiList.groupBy { it.idTransaksi }
 
-    // Hitung transaksi yang batal (jika ada item di struk tersebut yang berawalan ❌)
     val canceledTransactionsCount = groupedTransactions.count { (_, items) -> 
         items.any { it.namaItem.startsWith("❌") } 
     }
 
-    // Hitung transaksi yang berhasil (total struk dikurangi yang batal)
     val successfulTransactionsCount = groupedTransactions.size - canceledTransactionsCount
 
     Column(
@@ -723,8 +728,15 @@ fun PenjualanTabContent(
     }
 
     val coroutineScope = rememberCoroutineScope()
+    // 1. Dapatkan string tanggal hari ini
+    val todayDateStr = java.text.SimpleDateFormat("yyyyMMdd", java.util.Locale.getDefault()).format(java.util.Date())
+
+    // 2. Hitung total penjualan harian dengan memfilter berdasarkan awalan idTransaksi
     val totalPenjualanHarian = transaksiList
-        .filter { !it.namaItem.contains("[BATAL]", ignoreCase = true) }
+        .filter { 
+            it.idTransaksi.startsWith("TRX-$todayDateStr") && 
+            !it.namaItem.contains("[BATAL]", ignoreCase = true) 
+        }
         .sumOf { it.jumlah * it.harga }
 
     Box(modifier = modifier.fillMaxSize()) {
