@@ -432,11 +432,11 @@ fun BerandaTabContent(
     val coroutineScope = rememberCoroutineScope()
     val currentDate = java.text.SimpleDateFormat("EEEE, dd MMMM yyyy", java.util.Locale("id", "ID")).format(java.util.Date())
 
-    // 1. Dapatkan string tanggal hari ini dengan format yyyyMMdd
-    val todayDateStr = java.text.SimpleDateFormat("yyyyMMdd", java.util.Locale.getDefault()).format(java.util.Date())
+    // 1. Dapatkan string tanggal hari ini dengan format yyyy-MM-dd
+    val todayIsoStr = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.getDefault()).format(java.util.Date())
 
-    // 2. Filter transaksi agar hanya mengambil transaksi hari ini
-    val todayTransaksiList = transaksiList.filter { it.idTransaksi.startsWith("TRX-$todayDateStr") }
+    // 2. Filter transaksi agar hanya mengambil transaksi hari ini berdasarkan field "waktu"
+    val todayTransaksiList = transaksiList.filter { it.waktu.startsWith(todayIsoStr) }
 
     // 3. Hitung total pemasukan hari ini dari list yang sudah difilter
     val totalPenjualanHarian = todayTransaksiList
@@ -729,14 +729,14 @@ fun PenjualanTabContent(
 
     val coroutineScope = rememberCoroutineScope()
     // 1. Dapatkan string tanggal hari ini
-    val todayDateStr = java.text.SimpleDateFormat("yyyyMMdd", java.util.Locale.getDefault()).format(java.util.Date())
+    val todayIsoStr = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.getDefault()).format(java.util.Date())
 
-    // 2. Hitung total penjualan harian dengan memfilter berdasarkan awalan idTransaksi
-    val totalPenjualanHarian = transaksiList
-        .filter { 
-            it.idTransaksi.startsWith("TRX-$todayDateStr") && 
-            !it.namaItem.contains("[BATAL]", ignoreCase = true) 
-        }
+    // 2. Buat list transaksi hari ini berdasarkan awalan field "waktu"
+    val todayTransaksiList = transaksiList.filter { it.waktu.startsWith(todayIsoStr) }
+
+    // 3. Hitung total penjualan harian
+    val totalPenjualanHarian = todayTransaksiList
+        .filter { !it.namaItem.contains("[BATAL]", ignoreCase = true) }
         .sumOf { it.jumlah * it.harga }
 
     Box(modifier = modifier.fillMaxSize()) {
@@ -813,7 +813,7 @@ fun PenjualanTabContent(
                         shape = RoundedCornerShape(8.dp)
                     ) {
                         Text(
-                            text = "${transaksiList.size} Transaksi",
+                            text = "${transaksiList.groupBy { it.idTransaksi }.size} Transaksi",
                             modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
                             style = MaterialTheme.typography.labelLarge.copy(color = MaterialTheme.colorScheme.primary)
                         )
@@ -828,11 +828,46 @@ fun PenjualanTabContent(
                 fontWeight = FontWeight.Bold
             )
             Spacer(modifier = Modifier.height(8.dp))
-            val groupedTransactions = remember(transaksiList.toList()) {
-                transaksiList.groupBy { it.idTransaksi }
+            // Fungsi helper untuk mendapatkan tanggal (format dd MMMM yyyy) dari string waktu ISO
+            fun getDateString(rawTime: String): String {
+                if (rawTime.isBlank()) return "Tanggal Tidak Diketahui"
+                return try {
+                    // Coba parse full UTC string (Ambil 19 karakter pertama untuk membuang variasi milidetik)
+                    val parser = java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss", java.util.Locale.getDefault()).apply {
+                        timeZone = java.util.TimeZone.getTimeZone("UTC")
+                    }
+                    val formatter = java.text.SimpleDateFormat("dd MMMM yyyy", java.util.Locale("id", "ID"))
+                    val safeRawTime = if (rawTime.length >= 19) rawTime.substring(0, 19) else rawTime
+                    val date = parser.parse(safeRawTime) 
+                    
+                    if (date != null) formatter.format(date) else rawTime
+                } catch (e: Exception) {
+                    // Fallback jika format aneh
+                    try {
+                        val fallbackParser = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.getDefault())
+                        val fallbackFormatter = java.text.SimpleDateFormat("dd MMMM yyyy", java.util.Locale("id", "ID"))
+                        val date = fallbackParser.parse(rawTime.substring(0, 10))
+                        if (date != null) fallbackFormatter.format(date) else rawTime
+                    } catch (e2: Exception) {
+                        rawTime
+                    }
+                }
             }
+
+            // Grouping: Pertama gabungkan item per struk (idTransaksi), lalu urutkan dari yang terbaru, lalu group berdasarkan Tanggal
+            val groupedByDate = remember(transaksiList.toList()) {
+                val trxsById = transaksiList.groupBy { it.idTransaksi }
+                trxsById.entries
+                    .sortedByDescending { it.value.firstOrNull()?.waktu ?: "" }
+                    .groupBy { entry -> 
+                        val waktu = entry.value.firstOrNull()?.waktu ?: ""
+                        getDateString(waktu) 
+                    }
+            }
+            
             val expandedStates = remember { mutableStateMapOf<String, Boolean>() }
 
+            // Pengecekan kondisi kosong dikembalikan ke transaksiList keseluruhan
             if (transaksiList.isEmpty()) {
                 Box(
                     modifier = Modifier
@@ -852,15 +887,29 @@ fun PenjualanTabContent(
                     modifier = Modifier.weight(1f),
                     verticalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
-                    groupedTransactions.forEach { (trxId, itemsInTrx) ->
-                        item(key = trxId) {
-                            val isExpanded = expandedStates[trxId] ?: false
+                    groupedByDate.forEach { (dateStr, transactionsInDate) ->
+                        // 1. Tampilkan Header Tanggal (Section Header)
+                        item {
+                            Text(
+                                text = dateStr,
+                                style = MaterialTheme.typography.titleSmall,
+                                color = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.padding(top = 16.dp, bottom = 4.dp)
+                            )
+                        }
+
+                        // 2. Tampilkan Daftar Transaksi pada Tanggal Tersebut
+                        transactionsInDate.forEach { (trxId, itemsInTrx) ->
+                            item(key = trxId) {
+                                val isExpanded = expandedStates[trxId] ?: false
                             val totalTrxPrice = itemsInTrx.sumOf { it.jumlah * it.harga }
                             val totalItems = itemsInTrx.size
                             val rawTime = itemsInTrx.firstOrNull()?.waktu ?: ""
                             val time = try {
                                 if (rawTime.contains("T")) {
-                                    val parser = java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSSSSS'Z'", java.util.Locale.getDefault())
+                                    val parser = java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSSSSS'Z'", java.util.Locale.getDefault()).apply {
+                                        timeZone = java.util.TimeZone.getTimeZone("UTC")
+                                    }
                                     val formatter = java.text.SimpleDateFormat("dd MMM yyyy, HH:mm", java.util.Locale.getDefault())
                                     val date = parser.parse(rawTime)
                                     if (date != null) formatter.format(date) else rawTime
@@ -869,13 +918,17 @@ fun PenjualanTabContent(
                                 }
                             } catch (e: Exception) {
                                 try {
-                                    val parser = java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", java.util.Locale.getDefault())
+                                    val parser = java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", java.util.Locale.getDefault()).apply {
+                                        timeZone = java.util.TimeZone.getTimeZone("UTC")
+                                    }
                                     val formatter = java.text.SimpleDateFormat("dd MMM yyyy, HH:mm", java.util.Locale.getDefault())
                                     val date = parser.parse(rawTime)
                                     if (date != null) formatter.format(date) else rawTime
                                 } catch (e2: Exception) {
                                     try {
-                                        val parser = java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'", java.util.Locale.getDefault())
+                                        val parser = java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'", java.util.Locale.getDefault()).apply {
+                                            timeZone = java.util.TimeZone.getTimeZone("UTC")
+                                        }
                                         val formatter = java.text.SimpleDateFormat("dd MMM yyyy, HH:mm", java.util.Locale.getDefault())
                                         val date = parser.parse(rawTime)
                                         if (date != null) formatter.format(date) else rawTime
@@ -1016,6 +1069,7 @@ fun PenjualanTabContent(
                         }
                     }
                 }
+            }
             }
         }
 
