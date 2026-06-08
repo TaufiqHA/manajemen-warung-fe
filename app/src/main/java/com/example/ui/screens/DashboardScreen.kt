@@ -2388,7 +2388,7 @@ fun LabaRugiTabContent(
     val context = androidx.compose.ui.platform.LocalContext.current
     val currentMonthYear = java.text.SimpleDateFormat("MMMM yyyy", java.util.Locale("id", "ID")).format(java.util.Date())
     var selectedLabaDateFilter by remember { mutableStateOf("Bulan Ini") }
-    val labaDateFilters = listOf("Hari Ini", "Minggu Ini", "Bulan Ini", "Bulan Lalu", "Semua")
+    val labaDateFilters = listOf("Hari Ini", "Kemarin", "Minggu Ini", "Bulan Ini", "Bulan Lalu", "Semua")
 
     val todaySdf = remember { java.text.SimpleDateFormat("yyyyMMdd", java.util.Locale.getDefault()) }
     val todayStr = remember { todaySdf.format(java.util.Date()) }
@@ -2434,6 +2434,11 @@ fun LabaRugiTabContent(
                 cal.get(java.util.Calendar.MONTH) == today.get(java.util.Calendar.MONTH) &&
                 cal.get(java.util.Calendar.DAY_OF_MONTH) == today.get(java.util.Calendar.DAY_OF_MONTH)
             }
+            "Kemarin" -> {
+                val yesterday = java.util.Calendar.getInstance().apply { add(java.util.Calendar.DAY_OF_YEAR, -1) }
+                cal.get(java.util.Calendar.YEAR) == yesterday.get(java.util.Calendar.YEAR) &&
+                cal.get(java.util.Calendar.DAY_OF_YEAR) == yesterday.get(java.util.Calendar.DAY_OF_YEAR)
+            }
             "Minggu Ini" -> {
                 cal.get(java.util.Calendar.YEAR) == today.get(java.util.Calendar.YEAR) &&
                 cal.get(java.util.Calendar.WEEK_OF_YEAR) == today.get(java.util.Calendar.WEEK_OF_YEAR)
@@ -2459,6 +2464,11 @@ fun LabaRugiTabContent(
                 cal.get(java.util.Calendar.YEAR) == today.get(java.util.Calendar.YEAR) &&
                 cal.get(java.util.Calendar.MONTH) == today.get(java.util.Calendar.MONTH) &&
                 cal.get(java.util.Calendar.DAY_OF_MONTH) == today.get(java.util.Calendar.DAY_OF_MONTH)
+            }
+            "Kemarin" -> {
+                val yesterday = java.util.Calendar.getInstance().apply { add(java.util.Calendar.DAY_OF_YEAR, -1) }
+                cal.get(java.util.Calendar.YEAR) == yesterday.get(java.util.Calendar.YEAR) &&
+                cal.get(java.util.Calendar.DAY_OF_YEAR) == yesterday.get(java.util.Calendar.DAY_OF_YEAR)
             }
             "Minggu Ini" -> {
                 cal.get(java.util.Calendar.YEAR) == today.get(java.util.Calendar.YEAR) &&
@@ -2510,22 +2520,17 @@ fun LabaRugiTabContent(
         }
     }
 
-    val rincianList = remember(filteredTransactions) {
+    val transactionsByDate = remember(filteredTransactions) {
         filteredTransactions
             .filter { !it.namaItem.contains("[BATAL]", ignoreCase = true) }
             .groupBy { getTrxDateStr(it.idTransaksi) }
             .map { (dateStr, items) ->
                 val readableDate = formatReadableDate(dateStr)
-                val uniqueTrxCount = items.distinctBy { it.idTransaksi }.size
-                val totalRevenue = items.sumOf { it.jumlah * it.harga }.toLong()
-                dateStr to RincianHarian(
-                    tanggal = readableDate,
-                    jumlahOrder = uniqueTrxCount,
-                    totalPenjualan = totalRevenue
-                )
+                val transactionsById = items.groupBy { it.idTransaksi }
+                Triple(dateStr, readableDate, transactionsById)
             }
             .sortedByDescending { it.first }
-            .map { it.second }
+            .map { Pair(it.second, it.third) }
     }
 
     val menuTerlarisList = remember(filteredTransactions, menuList.toList()) {
@@ -2717,15 +2722,14 @@ fun LabaRugiTabContent(
             elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
         ) {
             Column(modifier = Modifier.padding(16.dp)) {
-                Text(
-                    text = currentMonthYear,
-                    style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.padding(bottom = 8.dp)
-                )
-                
-                if (rincianList.isEmpty()) {
+                if (transactionsByDate.isEmpty()) {
+                    Text(
+                        text = currentMonthYear,
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.padding(bottom = 8.dp)
+                    )
                     Text(
                         text = "Belum ada rincian harian",
                         style = MaterialTheme.typography.bodyMedium,
@@ -2733,22 +2737,65 @@ fun LabaRugiTabContent(
                         modifier = Modifier.padding(vertical = 8.dp)
                     )
                 } else {
-                    rincianList.forEachIndexed { index, item ->
-                        if (index > 0) {
-                            Divider(modifier = Modifier.padding(vertical = 8.dp))
+                    transactionsByDate.forEachIndexed { index, (tanggal, trxGroup) ->
+                        Text(
+                            text = tanggal,
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.padding(bottom = 8.dp)
+                        )
+                
+                        trxGroup.forEach { (trxId, itemsInTrx) ->
+                            val totalTrxPrice = itemsInTrx.sumOf { it.jumlah * it.harga }
+                            val totalItems = itemsInTrx.size
+                            val rawTime = itemsInTrx.firstOrNull()?.waktu ?: ""
+                            val timeDisplay = if (rawTime.contains("T")) {
+                                rawTime.substringAfter("T").take(5)
+                            } else rawTime.take(5)
+                            
+                            Card(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(bottom = 8.dp),
+                                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)),
+                                shape = RoundedCornerShape(8.dp)
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(12.dp).fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
+                                        Box(
+                                            modifier = Modifier
+                                                .size(40.dp)
+                                                .background(MaterialTheme.colorScheme.primary.copy(alpha=0.1f), androidx.compose.foundation.shape.CircleShape),
+                                            contentAlignment = Alignment.Center
+                                        ) { 
+                                            Text("🧾", style = MaterialTheme.typography.titleSmall) 
+                                        }
+                                        
+                                        Spacer(modifier = Modifier.width(12.dp))
+                                        
+                                        Column {
+                                            Text(trxId, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)
+                                            Text("$timeDisplay · $totalItems item", style = MaterialTheme.typography.labelMedium, color = Color.Gray)
+                                        }
+                                    }
+                                    
+                                    Text(
+                                        formatRupiah(totalTrxPrice.toLong()), 
+                                        style = MaterialTheme.typography.bodyMedium, 
+                                        fontWeight = FontWeight.Bold,
+                                        color = SuccessColor
+                                    )
+                                }
+                            }
                         }
-                        Column(modifier = Modifier.fillMaxWidth()) {
-                            Text(
-                                text = item.tanggal,
-                                style = MaterialTheme.typography.bodyMedium,
-                                fontWeight = FontWeight.Bold
-                            )
-                            Spacer(modifier = Modifier.height(4.dp))
-                            Text(
-                                text = "${item.jumlahOrder} kali order  •  ${formatRupiah(item.totalPenjualan)}",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = Color.Gray
-                            )
+                        
+                        if (index < transactionsByDate.size - 1) {
+                            Divider(modifier = Modifier.padding(vertical = 12.dp))
                         }
                     }
                 }
