@@ -16,6 +16,23 @@ data class ExportResponse(
     val message: String? = null,
     @com.squareup.moshi.Json(name = "download_url") val downloadUrl: String? = null
 )
+data class CategoryLayoutItem(
+    @com.squareup.moshi.Json(name = "name") val name: String,
+    @com.squareup.moshi.Json(name = "order") val order: Int
+)
+
+data class UpdateLayoutRequest(
+    @com.squareup.moshi.Json(name = "categories") val categories: List<CategoryLayoutItem>
+)
+
+data class ProductLayoutItem(
+    @com.squareup.moshi.Json(name = "id") val id: String,
+    @com.squareup.moshi.Json(name = "order") val order: Int
+)
+
+data class UpdateProductLayoutRequest(
+    @com.squareup.moshi.Json(name = "products") val products: List<ProductLayoutItem>
+)
 
 interface ProductApiService {
     @GET("api/v1/products")
@@ -49,5 +66,15 @@ interface ProductApiService {
         @Query("sort_by") sortBy: String? = null,
         @Query("sort_order") sortOrder: String? = null
     ): Response<ExportResponse>
+
+    @POST("api/v1/categories/layout")
+    suspend fun updateCategoryLayout(
+        @Body request: UpdateLayoutRequest
+    ): Response<BaseResponse<Any>>
+
+    @POST("api/v1/products/layout")
+    suspend fun updateProductLayout(
+        @Body request: UpdateProductLayoutRequest
+    ): Response<BaseResponse<Any>>
 }
 

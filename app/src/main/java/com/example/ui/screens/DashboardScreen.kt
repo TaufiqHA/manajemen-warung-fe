@@ -813,7 +813,7 @@ fun PenjualanTabContent(
                         shape = RoundedCornerShape(8.dp)
                     ) {
                         Text(
-                            text = "${transaksiList.groupBy { it.idTransaksi }.size} Transaksi",
+                            text = "${todayTransaksiList.groupBy { it.idTransaksi }.size} Transaksi",
                             modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
                             style = MaterialTheme.typography.labelLarge.copy(color = MaterialTheme.colorScheme.primary)
                         )
@@ -3402,6 +3402,7 @@ fun BarangTabContent(
         if (showPdfSettingsDialog) {
             var categoryToEditIndex by remember { mutableStateOf<Int?>(null) }
             var editCategoryNameText by remember { mutableStateOf("") }
+            var isSavingLayout by remember { mutableStateOf(false) }
 
             AlertDialog(
                 onDismissRequest = { showPdfSettingsDialog = false },
@@ -3519,27 +3520,124 @@ fun BarangTabContent(
                                             }
                                         }
                                     }
+                                    
+                                    val itemsInCategory = editableMenuList.filter { it.kategori == category }
+                                    if (itemsInCategory.isNotEmpty()) {
+                                        Column(modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 8.dp)) {
+                                            itemsInCategory.forEachIndexed { itemIndex, menuItem ->
+                                                Row(
+                                                    modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                                                    verticalAlignment = Alignment.CenterVertically,
+                                                    horizontalArrangement = Arrangement.SpaceBetween
+                                                ) {
+                                                    Text(menuItem.nama, style = MaterialTheme.typography.bodySmall, modifier = Modifier.weight(1f))
+                                                    Row {
+                                                        IconButton(
+                                                            onClick = {
+                                                                if (itemIndex > 0) {
+                                                                    val originalIndex1 = editableMenuList.indexOf(itemsInCategory[itemIndex])
+                                                                    val originalIndex2 = editableMenuList.indexOf(itemsInCategory[itemIndex - 1])
+                                                                    val newList = editableMenuList.toMutableList()
+                                                                    java.util.Collections.swap(newList, originalIndex1, originalIndex2)
+                                                                    editableMenuList = newList
+                                                                }
+                                                            },
+                                                            enabled = itemIndex > 0
+                                                        ) {
+                                                            Icon(Icons.Filled.KeyboardArrowUp, contentDescription = "Naikkan Menu", modifier = Modifier.size(16.dp))
+                                                        }
+                                                        IconButton(
+                                                            onClick = {
+                                                                if (itemIndex < itemsInCategory.size - 1) {
+                                                                    val originalIndex1 = editableMenuList.indexOf(itemsInCategory[itemIndex])
+                                                                    val originalIndex2 = editableMenuList.indexOf(itemsInCategory[itemIndex + 1])
+                                                                    val newList = editableMenuList.toMutableList()
+                                                                    java.util.Collections.swap(newList, originalIndex1, originalIndex2)
+                                                                    editableMenuList = newList
+                                                                }
+                                                            },
+                                                            enabled = itemIndex < itemsInCategory.size - 1
+                                                        ) {
+                                                            Icon(Icons.Filled.KeyboardArrowDown, contentDescription = "Turunkan Menu", modifier = Modifier.size(16.dp))
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
                                 }
                             }
                         }
                     }
                 },
                 confirmButton = {
-                    Button(onClick = {
-                        coroutineScope.launch(kotlinx.coroutines.Dispatchers.IO) {
-                            try {
-                                if (isExportExcelMode) {
-                                    com.example.utils.generateMenuCetakExcel(context, editableMenuList, pdfCategoryOrder)
-                                } else {
-                                    com.example.utils.generateMenuCetakPdf(context, editableMenuList, pdfCategoryOrder)
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        OutlinedButton(
+                            enabled = !isSavingLayout,
+                            onClick = {
+                                isSavingLayout = true
+                                coroutineScope.launch {
+                                    try {
+                                        val catRequestData = pdfCategoryOrder.mapIndexed { index, catName ->
+                                            com.example.data.api.CategoryLayoutItem(name = catName, order = index)
+                                        }
+                                        val prodRequestData = editableMenuList.mapIndexed { index, item ->
+                                            com.example.data.api.ProductLayoutItem(id = item.id, order = index)
+                                        }
+                                        
+                                        val catRequest = com.example.data.api.UpdateLayoutRequest(categories = catRequestData)
+                                        val prodRequest = com.example.data.api.UpdateProductLayoutRequest(products = prodRequestData)
+                                        
+                                        val catResponse = com.example.data.api.RetrofitClient.getProductApiService(context).updateCategoryLayout(catRequest)
+                                        val prodResponse = com.example.data.api.RetrofitClient.getProductApiService(context).updateProductLayout(prodRequest)
+                                        
+                                        if (catResponse.isSuccessful && prodResponse.isSuccessful) {
+                                            android.widget.Toast.makeText(context, "Tata letak berhasil disimpan", android.widget.Toast.LENGTH_SHORT).show()
+                                            val productResponse = com.example.data.api.RetrofitClient.getProductApiService(context).getProducts()
+                                            if (productResponse.isSuccessful && productResponse.body()?.data != null) {
+                                                menuList.clear()
+                                                menuList.addAll(productResponse.body()!!.data!!)
+                                            }
+                                        } else {
+                                            android.widget.Toast.makeText(context, "Gagal menyimpan tata letak sebagian", android.widget.Toast.LENGTH_SHORT).show()
+                                        }
+                                    } catch (e: Exception) {
+                                        android.widget.Toast.makeText(context, "Error: ${e.message}", android.widget.Toast.LENGTH_SHORT).show()
+                                    } finally {
+                                        isSavingLayout = false
+                                    }
                                 }
-                            } catch (e: Throwable) {
-                                e.printStackTrace()
+                            }
+                        ) {
+                            if (isSavingLayout) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(16.dp),
+                                    color = MaterialTheme.colorScheme.primary,
+                                    strokeWidth = 2.dp
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text("Menyimpan...")
+                            } else {
+                                Text("Simpan Layout")
                             }
                         }
-                        showPdfSettingsDialog = false
-                    }) {
-                        Text(if (isExportExcelMode) "Export Excel" else "Export PDF")
+
+                        Button(onClick = {
+                            coroutineScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+                                try {
+                                    if (isExportExcelMode) {
+                                        com.example.utils.generateMenuCetakExcel(context, editableMenuList, pdfCategoryOrder)
+                                    } else {
+                                        com.example.utils.generateMenuCetakPdf(context, editableMenuList, pdfCategoryOrder)
+                                    }
+                                } catch (e: Throwable) {
+                                    e.printStackTrace()
+                                }
+                            }
+                            showPdfSettingsDialog = false
+                        }) {
+                            Text(if (isExportExcelMode) "Export Excel" else "Export PDF")
+                        }
                     }
                 },
                 dismissButton = {
