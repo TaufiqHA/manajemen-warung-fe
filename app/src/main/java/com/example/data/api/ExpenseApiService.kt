@@ -8,7 +8,9 @@ import retrofit2.http.*
 interface ExpenseApiService {
     @GET("api/v1/expenses")
     suspend fun getExpenses(
-        @Query("filter") filter: String? = null
+        @Query("filter") filter: String? = null,
+        @Query("start_date") startDate: String? = null,
+        @Query("end_date") endDate: String? = null
     ): Response<BaseResponse<List<BiayaOperasional>>>
 
     @POST("api/v1/expenses")

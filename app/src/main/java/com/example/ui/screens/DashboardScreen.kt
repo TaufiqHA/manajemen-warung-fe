@@ -58,6 +58,8 @@ import com.example.utils.generateLabaRugiPdf
 import com.example.data.InvoiceItem
 import com.example.data.TransactionModel
 import com.example.data.Transaction
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -1831,6 +1833,7 @@ fun PenjualanTabContent(
 fun BiayaTabContent(
     role: String,
     biayaList: MutableList<BiayaOperasional>,
+    biayaViewModel: com.example.ui.viewmodel.BiayaViewModel = androidx.lifecycle.viewmodel.compose.viewModel(),
     snackbarHostState: SnackbarHostState,
     modifier: Modifier = Modifier
 ) {
@@ -1845,11 +1848,16 @@ fun BiayaTabContent(
     val categories = listOf("Semua", "Bahan Baku", "Biaya Operasional", "Biaya dll")
 
     var selectedDateFilter by remember { mutableStateOf("Bulan Ini") }
-    val dates = listOf("Hari Ini", "Minggu Ini", "Bulan Ini", "Bulan Lalu", "Semua")
+    val dates = listOf("Hari Ini", "Minggu Ini", "Bulan Ini", "Bulan Lalu", "Semua", "Pilih Tanggal")
+    var showDateRangePicker by remember { mutableStateOf(false) }
+    var customStartMillis by remember { mutableStateOf<Long?>(null) }
+    var customEndMillis by remember { mutableStateOf<Long?>(null) }
+
+    val viewModelBiayaList by biayaViewModel.biayaList.collectAsState()
 
     fun getCalendarForBiaya(tanggalStr: String): java.util.Calendar? {
         return try {
-            val sdf = java.text.SimpleDateFormat("d MMMM yyyy", java.util.Locale("in", "ID"))
+            val sdf = java.text.SimpleDateFormat("d MMMM yyyy", java.util.Locale("id", "ID"))
             val date = sdf.parse(tanggalStr) ?: return null
             val cal = java.util.Calendar.getInstance()
             cal.time = date
@@ -1874,8 +1882,29 @@ fun BiayaTabContent(
         }
     }
 
-    val filteredList = remember(biayaList.toList(), selectedDateFilter) {
-        if (selectedDateFilter == "Semua") biayaList else biayaList.filter { isBiayaMatchingFilter(it.tanggal, selectedDateFilter) }
+    val filteredList = remember(biayaList.toList(), selectedDateFilter, customStartMillis, customEndMillis) {
+        when (selectedDateFilter) {
+            "Semua" -> biayaList
+            "Pilih Tanggal" -> {
+                if (customStartMillis != null && customEndMillis != null) {
+                    val sdfUtc = java.text.SimpleDateFormat("yyyyMMdd", java.util.Locale.getDefault()).apply {
+                        timeZone = java.util.TimeZone.getTimeZone("UTC")
+                    }
+                    val startInt = sdfUtc.format(java.util.Date(customStartMillis!!)).toInt()
+                    val endInt = sdfUtc.format(java.util.Date(customEndMillis!!)).toInt()
+
+                    val sdfLocal = java.text.SimpleDateFormat("yyyyMMdd", java.util.Locale.getDefault())
+                    biayaList.filter {
+                        val cal = getCalendarForBiaya(it.tanggal)
+                        if (cal != null) {
+                            val itemInt = sdfLocal.format(cal.time).toInt()
+                            itemInt in startInt..endInt
+                        } else false
+                    }
+                } else biayaList
+            }
+            else -> biayaList.filter { isBiayaMatchingFilter(it.tanggal, selectedDateFilter) }
+        }
     }
 
     Box(modifier = modifier.fillMaxSize()) {
@@ -1910,7 +1939,13 @@ fun BiayaTabContent(
                     val isSelected = selectedDateFilter == dateLabel
                     FilterChip(
                         selected = isSelected,
-                        onClick = { selectedDateFilter = dateLabel },
+                        onClick = { 
+                            if (dateLabel == "Pilih Tanggal") {
+                                showDateRangePicker = true
+                            } else {
+                                selectedDateFilter = dateLabel
+                            }
+                        },
                         label = { Text(dateLabel) },
                         colors = FilterChipDefaults.filterChipColors(
                             selectedContainerColor = MaterialTheme.colorScheme.primary,
@@ -2217,6 +2252,7 @@ fun BiayaTabContent(
                                     coroutineScope.launch {
                                         try {
                                              com.example.data.api.RetrofitClient.getExpenseApiService(mContext).updateExpense(updatedExpense.id, updatedExpense)
+                                             biayaViewModel.loadExpenses()
                                         } catch (e: Exception) {}
                                     }
                                     biayaList[index] = updatedExpense
@@ -2240,6 +2276,7 @@ fun BiayaTabContent(
                                 coroutineScope.launch {
                                     try {
                                         com.example.data.api.RetrofitClient.getExpenseApiService(mContext).addExpense(newExpense)
+                                        biayaViewModel.loadExpenses()
                                     } catch (e: Exception) {}
                                 }
                                 biayaList.add(newExpense)
@@ -2280,6 +2317,7 @@ fun BiayaTabContent(
                     coroutineScope.launch {
                         try {
                             com.example.data.api.RetrofitClient.getExpenseApiService(mContext).deleteExpense(item.id)
+                            biayaViewModel.loadExpenses()
                         } catch (e: Exception) {}
                     }
                     biayaList.remove(item)
@@ -2368,6 +2406,63 @@ fun BiayaTabContent(
                     }
                 }
             )
+        }
+
+        // ---------- DATE RANGE PICKER DIALOG ----------
+        if (showDateRangePicker) {
+            val dateRangePickerState = rememberDateRangePickerState()
+
+            Dialog(
+                onDismissRequest = { showDateRangePicker = false },
+                properties = DialogProperties(usePlatformDefaultWidth = false)
+            ) {
+                Surface(
+                    modifier = Modifier
+                        .fillMaxWidth(0.95f)
+                        .fillMaxHeight(0.85f),
+                    shape = RoundedCornerShape(16.dp),
+                    color = MaterialTheme.colorScheme.surface
+                ) {
+                    Column(
+                        modifier = Modifier.fillMaxSize()
+                    ) {
+                        DateRangePicker(
+                            state = dateRangePickerState,
+                            title = { Text("Pilih Rentang Tanggal", modifier = Modifier.padding(16.dp)) },
+                            headline = null,
+                            modifier = Modifier.weight(1f)
+                        )
+                        
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(16.dp),
+                            horizontalArrangement = Arrangement.End
+                        ) {
+                            TextButton(
+                                onClick = { showDateRangePicker = false },
+                                modifier = Modifier.padding(end = 8.dp)
+                            ) {
+                                Text("Batal")
+                            }
+                            TextButton(onClick = {
+                                showDateRangePicker = false
+                                
+                                val startMillis = dateRangePickerState.selectedStartDateMillis
+                                val endMillis = dateRangePickerState.selectedEndDateMillis ?: startMillis
+
+                                if (startMillis != null && endMillis != null) {
+                                    customStartMillis = startMillis
+                                    customEndMillis = endMillis
+                                    selectedDateFilter = "Pilih Tanggal"
+                                }
+                            }) {
+                                Text("Pilih")
+                            }
+                        }
+                    }
+                }
+            }
         }
     }
 }
