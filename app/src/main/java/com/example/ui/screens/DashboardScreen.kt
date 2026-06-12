@@ -3124,6 +3124,13 @@ fun BarangTabContent(
     var editableMenuList by remember { mutableStateOf(listOf<MenuItem>()) }
     var isExportExcelMode by remember { mutableStateOf(false) }
 
+    var searchQuery by remember { mutableStateOf("") }
+    val filteredMenuList = if (searchQuery.isBlank()) {
+        menuList
+    } else {
+        menuList.filter { it.nama.contains(searchQuery, ignoreCase = true) }
+    }
+
     val context = androidx.compose.ui.platform.LocalContext.current
     val mContext = context
     val coroutineScope = rememberCoroutineScope()
@@ -3145,6 +3152,19 @@ fun BarangTabContent(
                     style = MaterialTheme.typography.titleLarge,
                     fontWeight = FontWeight.Bold
                 )
+
+                OutlinedTextField(
+                    value = searchQuery,
+                    onValueChange = { searchQuery = it },
+                    placeholder = { Text("Cari...") },
+                    singleLine = true,
+                    modifier = Modifier
+                        .weight(1f)
+                        .padding(horizontal = 12.dp)
+                        .height(50.dp),
+                    shape = RoundedCornerShape(8.dp)
+                )
+
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -3210,7 +3230,7 @@ fun BarangTabContent(
                     modifier = Modifier.weight(1f),
                     verticalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
-                    items(menuList) { item ->
+                    items(filteredMenuList) { item ->
                         Card(
                             modifier = Modifier.fillMaxWidth(),
                             colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
