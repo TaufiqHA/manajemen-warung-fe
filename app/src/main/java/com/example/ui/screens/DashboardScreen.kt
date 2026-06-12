@@ -730,11 +730,38 @@ fun PenjualanTabContent(
     }
 
     val coroutineScope = rememberCoroutineScope()
-    // 1. Dapatkan string tanggal hari ini
-    val todayIsoStr = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.getDefault()).format(java.util.Date())
 
-    // 2. Buat list transaksi hari ini berdasarkan awalan field "waktu"
-    val todayTransaksiList = transaksiList.filter { it.waktu.startsWith(todayIsoStr) }
+    // Fungsi helper untuk mendapatkan tanggal (format dd MMMM yyyy) dari string waktu ISO
+    fun getDateString(rawTime: String): String {
+        if (rawTime.isBlank()) return "Tanggal Tidak Diketahui"
+        return try {
+            // Coba parse full UTC string (Ambil 19 karakter pertama untuk membuang variasi milidetik)
+            val parser = java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss", java.util.Locale.getDefault()).apply {
+                timeZone = java.util.TimeZone.getTimeZone("UTC")
+            }
+            val formatter = java.text.SimpleDateFormat("dd MMMM yyyy", java.util.Locale("id", "ID"))
+            val safeRawTime = if (rawTime.length >= 19) rawTime.substring(0, 19) else rawTime
+            val date = parser.parse(safeRawTime) 
+            
+            if (date != null) formatter.format(date) else rawTime
+        } catch (e: Exception) {
+            // Fallback jika format aneh
+            try {
+                val fallbackParser = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.getDefault())
+                val fallbackFormatter = java.text.SimpleDateFormat("dd MMMM yyyy", java.util.Locale("id", "ID"))
+                val date = fallbackParser.parse(rawTime.substring(0, 10))
+                if (date != null) fallbackFormatter.format(date) else rawTime
+            } catch (e2: Exception) {
+                rawTime
+            }
+        }
+    }
+
+    // 1. Dapatkan string tanggal hari ini dengan format lokal (dd MMMM yyyy) agar konsisten dengan DAFTAR TRANSAKSI
+    val todayLocalStr = java.text.SimpleDateFormat("dd MMMM yyyy", java.util.Locale("id", "ID")).format(java.util.Date())
+
+    // 2. Buat list transaksi hari ini dengan memanfaatkan fungsi parsing UTC ke Lokal
+    val todayTransaksiList = transaksiList.filter { getDateString(it.waktu) == todayLocalStr }
 
     // 3. Hitung total penjualan harian
     val totalPenjualanHarian = todayTransaksiList
@@ -830,31 +857,6 @@ fun PenjualanTabContent(
                 fontWeight = FontWeight.Bold
             )
             Spacer(modifier = Modifier.height(8.dp))
-            // Fungsi helper untuk mendapatkan tanggal (format dd MMMM yyyy) dari string waktu ISO
-            fun getDateString(rawTime: String): String {
-                if (rawTime.isBlank()) return "Tanggal Tidak Diketahui"
-                return try {
-                    // Coba parse full UTC string (Ambil 19 karakter pertama untuk membuang variasi milidetik)
-                    val parser = java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss", java.util.Locale.getDefault()).apply {
-                        timeZone = java.util.TimeZone.getTimeZone("UTC")
-                    }
-                    val formatter = java.text.SimpleDateFormat("dd MMMM yyyy", java.util.Locale("id", "ID"))
-                    val safeRawTime = if (rawTime.length >= 19) rawTime.substring(0, 19) else rawTime
-                    val date = parser.parse(safeRawTime) 
-                    
-                    if (date != null) formatter.format(date) else rawTime
-                } catch (e: Exception) {
-                    // Fallback jika format aneh
-                    try {
-                        val fallbackParser = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.getDefault())
-                        val fallbackFormatter = java.text.SimpleDateFormat("dd MMMM yyyy", java.util.Locale("id", "ID"))
-                        val date = fallbackParser.parse(rawTime.substring(0, 10))
-                        if (date != null) fallbackFormatter.format(date) else rawTime
-                    } catch (e2: Exception) {
-                        rawTime
-                    }
-                }
-            }
 
             // Grouping: Pertama gabungkan item per struk (idTransaksi), lalu urutkan dari yang terbaru, lalu group berdasarkan Tanggal
             val groupedByDate = remember(transaksiList.toList()) {
@@ -1953,6 +1955,21 @@ fun BiayaTabContent(
                         )
                     )
                 }
+            }
+
+            // Menampilkan teks tanggal yang dipilih jika filter 'Pilih Tanggal' aktif
+            if (selectedDateFilter == "Pilih Tanggal" && customStartMillis != null && customEndMillis != null) {
+                val sdfDisplay = java.text.SimpleDateFormat("dd MMM yyyy", java.util.Locale("id", "ID"))
+                val startDateStr = sdfDisplay.format(java.util.Date(customStartMillis!!))
+                val endDateStr = sdfDisplay.format(java.util.Date(customEndMillis!!))
+                
+                androidx.compose.material3.Text(
+                    text = "$startDateStr - $endDateStr",
+                    style = androidx.compose.material3.MaterialTheme.typography.bodyMedium,
+                    fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold,
+                    color = androidx.compose.material3.MaterialTheme.colorScheme.primary,
+                    modifier = androidx.compose.ui.Modifier.padding(top = 8.dp, start = 4.dp)
+                )
             }
 
             Spacer(modifier = Modifier.height(24.dp))
