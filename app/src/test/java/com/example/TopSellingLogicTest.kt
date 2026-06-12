@@ -33,7 +33,7 @@ class TopSellingLogicTest {
                 originalName to Pair(totalQty, totalRevenue)
             }
             .sortedByDescending { it.second.first }
-            .take(5)
+            .take(15)
             .mapIndexed { index, pair ->
                 MenuTerlaris(
                     namaBarang = pair.first,
