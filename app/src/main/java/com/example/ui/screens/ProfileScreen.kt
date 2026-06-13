@@ -130,38 +130,37 @@ fun ProfilTabContent(
         }
 
         // 2. Card Group 1: Akun & Pengaturan
-        Card(
-            modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(12.dp),
-            elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
-        ) {
-            Column {
-                ProfileMenuItem(
-                    iconResId = R.drawable.ic_custom_profile,
-                    title = "Ubah Nama",
-                    onClick = { displayNamaChange = true }
-                )
-                
-                if (userRole == UserRole.OWNER) {
+        if (userRole == UserRole.OWNER) {
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(12.dp),
+                elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+            ) {
+                Column {
+                    ProfileMenuItem(
+                        iconResId = R.drawable.ic_custom_profile,
+                        title = "Ubah Nama",
+                        onClick = { displayNamaChange = true }
+                    )
+                    
                     Divider(modifier = Modifier.padding(horizontal = 16.dp), color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
                     ProfileMenuItem(
                         iconResId = R.drawable.ic_custom_settings,
                         title = "Pengaturan Logo",
                         onClick = { onNavigateToSettings() }
                     )
+                    
+                    Divider(modifier = Modifier.padding(horizontal = 16.dp), color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+                    ProfileMenuItem(
+                        iconResId = R.drawable.ic_custom_lock,
+                        title = "Ubah Password",
+                        onClick = { displayPasswordChange = true }
+                    )
                 }
-                
-                Divider(modifier = Modifier.padding(horizontal = 16.dp), color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
-                ProfileMenuItem(
-                    iconResId = R.drawable.ic_custom_lock,
-                    title = "Ubah Password",
-                    onClick = { displayPasswordChange = true }
-                )
             }
+            Spacer(modifier = Modifier.height(16.dp))
         }
-
-        Spacer(modifier = Modifier.height(16.dp))
 
         // --- Card: Pengaturan Akun ---
         if (userRole == UserRole.OWNER) {

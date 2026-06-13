@@ -71,7 +71,8 @@ enum class DashboardTab(val label: String) {
     ManajemenBarang("Barang"),
     LabaRugi("Laba Rugi"),
     Biaya("Biaya"),
-    Profil("Profile")
+    Profil("Profile"),
+    UserManagement("User")
 }
 
 // Struktur data untuk setiap item menu
@@ -119,6 +120,12 @@ val allMenus = listOf(
         icon = AppIcons.Profile,
         tab = DashboardTab.Profil,
         allowedRoles = listOf(UserRole.OWNER, UserRole.ADMIN_TOKO, UserRole.ADMIN_KANTOR)
+    ),
+    DashboardMenu(
+        title = "User",
+        icon = AppIcons.Profile, // Reusing profile icon for user management
+        tab = DashboardTab.UserManagement,
+        allowedRoles = listOf(UserRole.OWNER)
     )
 )
 
@@ -413,6 +420,11 @@ fun DashboardScreen(
                         onNavigateToSettings = onNavigateToSettings
                     )
                 }
+                DashboardTab.UserManagement -> {
+                    UserManagementTabContent(
+                        snackbarHostState = snackbarHostState
+                    )
+                }
             }
         }
     }
@@ -434,11 +446,11 @@ fun BerandaTabContent(
     val coroutineScope = rememberCoroutineScope()
     val currentDate = java.text.SimpleDateFormat("EEEE, dd MMMM yyyy", java.util.Locale("id", "ID")).format(java.util.Date())
 
-    // 1. Dapatkan string tanggal hari ini dengan format yyyy-MM-dd
-    val todayIsoStr = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.getDefault()).format(java.util.Date())
+    // 1. Dapatkan string tanggal hari ini dengan format yyyyMMdd (sesuai format idTransaksi)
+    val todayIdStr = java.text.SimpleDateFormat("yyyyMMdd", java.util.Locale.getDefault()).format(java.util.Date())
 
-    // 2. Filter transaksi agar hanya mengambil transaksi hari ini berdasarkan field "waktu"
-    val todayTransaksiList = transaksiList.filter { it.waktu.startsWith(todayIsoStr) }
+    // 2. Filter transaksi agar mengambil transaksi yang idTransaksi-nya mengandung tanggal hari ini
+    val todayTransaksiList = transaksiList.filter { it.idTransaksi.contains(todayIdStr) }
 
     // 3. Hitung total pemasukan hari ini dari list yang sudah difilter
     val totalPenjualanHarian = todayTransaksiList
@@ -757,11 +769,11 @@ fun PenjualanTabContent(
         }
     }
 
-    // 1. Dapatkan string tanggal hari ini dengan format lokal (dd MMMM yyyy) agar konsisten dengan DAFTAR TRANSAKSI
-    val todayLocalStr = java.text.SimpleDateFormat("dd MMMM yyyy", java.util.Locale("id", "ID")).format(java.util.Date())
+    // 1. Dapatkan string tanggal hari ini dengan format yyyyMMdd (sesuai format idTransaksi)
+    val todayIdStr = java.text.SimpleDateFormat("yyyyMMdd", java.util.Locale.getDefault()).format(java.util.Date())
 
-    // 2. Buat list transaksi hari ini dengan memanfaatkan fungsi parsing UTC ke Lokal
-    val todayTransaksiList = transaksiList.filter { getDateString(it.waktu) == todayLocalStr }
+    // 2. Filter transaksi agar mengambil transaksi yang idTransaksi-nya mengandung tanggal hari ini
+    val todayTransaksiList = transaksiList.filter { it.idTransaksi.contains(todayIdStr) }
 
     // 3. Hitung total penjualan harian
     val totalPenjualanHarian = todayTransaksiList

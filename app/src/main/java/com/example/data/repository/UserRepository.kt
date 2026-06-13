@@ -58,4 +58,30 @@ class UserRepository(private val context: Context) {
             Result.failure(e)
         }
     }
+    suspend fun getAllUsers(): Result<List<UserData>> {
+        return try {
+            val response = com.example.data.api.RetrofitClient.getUserApiService(context).getAllUsers()
+            if (response.isSuccessful && response.body() != null) {
+                Result.success(response.body()!!.data ?: emptyList())
+            } else {
+                Result.failure(Exception("Gagal mengambil daftar user"))
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    suspend fun updateUserById(userId: String, name: String, password: String?): Result<Unit> {
+        return try {
+            val request = com.example.data.UpdateUserRequest(name = name, password = password)
+            val response = com.example.data.api.RetrofitClient.getUserApiService(context).updateUser(userId, request)
+            if (response.isSuccessful && response.body()?.success == true) {
+                Result.success(Unit)
+            } else {
+                Result.failure(Exception("Gagal mengubah data user"))
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
 }

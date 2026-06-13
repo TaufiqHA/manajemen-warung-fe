@@ -39,6 +39,19 @@ data class BaseResponse<T>(
 @JsonClass(generateAdapter = true)
 data class UpdateUserRequest(
     @com.squareup.moshi.Json(name = "name") val name: String,
-    @com.squareup.moshi.Json(name = "username") val username: String? = null
+    @com.squareup.moshi.Json(name = "username") val username: String? = null,
+    @com.squareup.moshi.Json(name = "password") val password: String? = null
+)
+
+@JsonClass(generateAdapter = true)
+data class UserListResponse(
+    val data: List<UserData>? = null
+)
+
+@JsonClass(generateAdapter = true)
+data class UserUpdateResponse(
+    val success: Boolean,
+    val message: String? = null,
+    val data: UserData? = null
 )
 
