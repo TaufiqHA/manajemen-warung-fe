@@ -40,6 +40,7 @@ data class BaseResponse<T>(
 data class UpdateUserRequest(
     @com.squareup.moshi.Json(name = "name") val name: String,
     @com.squareup.moshi.Json(name = "username") val username: String? = null,
+    @com.squareup.moshi.Json(name = "email") val email: String? = null,
     @com.squareup.moshi.Json(name = "password") val password: String? = null
 )
 

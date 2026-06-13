@@ -71,9 +71,9 @@ class UserRepository(private val context: Context) {
         }
     }
 
-    suspend fun updateUserById(userId: String, name: String, password: String?): Result<Unit> {
+    suspend fun updateUserById(userId: String, name: String, email: String?, password: String?): Result<Unit> {
         return try {
-            val request = com.example.data.UpdateUserRequest(name = name, password = password)
+            val request = com.example.data.UpdateUserRequest(name = name, email = email, password = password)
             val response = com.example.data.api.RetrofitClient.getUserApiService(context).updateUser(userId, request)
             if (response.isSuccessful && response.body()?.success == true) {
                 Result.success(Unit)

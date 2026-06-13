@@ -126,6 +126,7 @@ fun UserManagementTabContent(
 
         if (displayEditDialog && selectedUser != null) {
             var newName by remember { mutableStateOf(selectedUser!!.name) }
+            var newEmail by remember { mutableStateOf(selectedUser!!.email) }
             var newPassword by remember { mutableStateOf("") }
             var isError by remember { mutableStateOf(false) }
             var isSaving by remember { mutableStateOf(false) }
@@ -142,6 +143,13 @@ fun UserManagementTabContent(
                                 isError = false
                             },
                             label = { Text("Nama Baru") },
+                            singleLine = true,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                        OutlinedTextField(
+                            value = newEmail,
+                            onValueChange = { newEmail = it },
+                            label = { Text("Email Baru") },
                             singleLine = true,
                             modifier = Modifier.fillMaxWidth()
                         )
@@ -172,6 +180,7 @@ fun UserManagementTabContent(
                                     val result = userRepository.updateUserById(
                                         userId = selectedUser!!.id,
                                         name = newName.trim(),
+                                        email = newEmail.trim().takeIf { it.isNotBlank() },
                                         password = if (newPassword.isNotBlank()) newPassword else null
                                     )
                                     isSaving = false

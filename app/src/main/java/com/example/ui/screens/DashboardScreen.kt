@@ -2512,6 +2512,7 @@ fun LabaRugiTabContent(
     val context = androidx.compose.ui.platform.LocalContext.current
     val currentMonthYear = java.text.SimpleDateFormat("MMMM yyyy", java.util.Locale("id", "ID")).format(java.util.Date())
     var selectedLabaDateFilter by remember { mutableStateOf("Bulan Ini") }
+    var expandedTrxId by remember { mutableStateOf<String?>(null) }
     val labaDateFilters = listOf("Hari Ini", "Kemarin", "Minggu Ini", "Bulan Ini", "Bulan Lalu", "Semua")
 
     val todaySdf = remember { java.text.SimpleDateFormat("yyyyMMdd", java.util.Locale.getDefault()) }
@@ -2881,39 +2882,65 @@ fun LabaRugiTabContent(
                             Card(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .padding(bottom = 8.dp),
+                                    .padding(bottom = 8.dp)
+                                    .clickable { expandedTrxId = if (expandedTrxId == trxId) null else trxId },
                                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)),
                                 shape = RoundedCornerShape(8.dp)
                             ) {
-                                Row(
-                                    modifier = Modifier.padding(12.dp).fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.SpaceBetween,
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
-                                        Box(
-                                            modifier = Modifier
-                                                .size(40.dp)
-                                                .background(MaterialTheme.colorScheme.primary.copy(alpha=0.1f), androidx.compose.foundation.shape.CircleShape),
-                                            contentAlignment = Alignment.Center
-                                        ) { 
-                                            Text("🧾", style = MaterialTheme.typography.titleSmall) 
+                                Column {
+                                    Row(
+                                        modifier = Modifier.padding(12.dp).fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
+                                            Box(
+                                                modifier = Modifier
+                                                    .size(40.dp)
+                                                    .background(MaterialTheme.colorScheme.primary.copy(alpha=0.1f), androidx.compose.foundation.shape.CircleShape),
+                                                contentAlignment = Alignment.Center
+                                            ) { 
+                                                Text("🧾", style = MaterialTheme.typography.titleSmall) 
+                                            }
+                                            
+                                            Spacer(modifier = Modifier.width(12.dp))
+                                            
+                                            Column {
+                                                Text(trxId, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)
+                                                Text("$timeDisplay · $totalItems item", style = MaterialTheme.typography.labelMedium, color = Color.Gray)
+                                            }
                                         }
                                         
-                                        Spacer(modifier = Modifier.width(12.dp))
-                                        
-                                        Column {
-                                            Text(trxId, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)
-                                            Text("$timeDisplay · $totalItems item", style = MaterialTheme.typography.labelMedium, color = Color.Gray)
+                                        Text(
+                                            formatRupiah(totalTrxPrice.toLong()), 
+                                            style = MaterialTheme.typography.bodyMedium, 
+                                            fontWeight = FontWeight.Bold,
+                                            color = SuccessColor
+                                        )
+                                    }
+                                    if (expandedTrxId == trxId) {
+                                        Divider(
+                                            modifier = Modifier.padding(horizontal = 12.dp),
+                                            color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
+                                        )
+                                        Column(modifier = Modifier.padding(12.dp)) {
+                                            itemsInTrx.forEach { item ->
+                                                Row(
+                                                    modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                                                    horizontalArrangement = Arrangement.SpaceBetween
+                                                ) {
+                                                    Text(
+                                                        text = "${item.jumlah}x ${item.namaItem}",
+                                                        style = MaterialTheme.typography.bodySmall
+                                                    )
+                                                    Text(
+                                                        text = formatRupiah((item.jumlah * item.harga).toLong()),
+                                                        style = MaterialTheme.typography.bodySmall
+                                                    )
+                                                }
+                                            }
                                         }
                                     }
-                                    
-                                    Text(
-                                        formatRupiah(totalTrxPrice.toLong()), 
-                                        style = MaterialTheme.typography.bodyMedium, 
-                                        fontWeight = FontWeight.Bold,
-                                        color = SuccessColor
-                                    )
                                 }
                             }
                         }
