@@ -125,7 +125,7 @@ class SalesViewModel(application: Application) : AndroidViewModel(application) {
         _cartItems.clear()
     }
 
-    fun processTransaction(diskonPersen: Double = 0.0, diskonNominal: Long = 0L, totalSetelahDiskon: Long = totalHarga, paymentMethod: String = "Cash"): Transaction {
+    fun processTransaction(customerName: String, diskonPersen: Double = 0.0, diskonNominal: Long = 0L, totalSetelahDiskon: Long = totalHarga, paymentMethod: String = "Cash"): Transaction {
         val dateNow = Date()
         val dateStr = SimpleDateFormat("yyyyMMdd", Locale.getDefault()).format(dateNow)
         val timeStr = SimpleDateFormat("HHmmss", Locale.getDefault()).format(dateNow)
@@ -133,6 +133,8 @@ class SalesViewModel(application: Application) : AndroidViewModel(application) {
         val transaction = Transaction(
             kodeTransaksi = kode,
             tanggalTransaksi = System.currentTimeMillis(),
+            customerName = customerName,
+            status = "PENDING",
             items = _cartItems.toList(),
             totalHarga = totalHarga,
             diskonPersen = diskonPersen,
@@ -230,6 +232,40 @@ class SalesViewModel(application: Application) : AndroidViewModel(application) {
         val f3Padding = (lineWidth - footer3.length) / 2
         sb.append(" ".repeat(f3Padding.coerceAtLeast(0)) + footer3 + "\n")
         
+        return sb.toString()
+    }
+
+    fun formatKitchenReceipt(transaction: Transaction): String {
+        val lineWidth = 32
+        val sdf = SimpleDateFormat("dd/MM/yyyy HH:mm", Locale.getDefault())
+        val dateStr = sdf.format(Date(transaction.tanggalTransaksi))
+        
+        val sb = StringBuilder()
+        
+        // Header
+        val title = "STRUK DAPUR"
+        val titlePadding = (lineWidth - title.length) / 2
+        sb.append(" ".repeat(titlePadding.coerceAtLeast(0)) + title + "\n")
+        
+        sb.append("-".repeat(lineWidth) + "\n")
+        sb.append("No: ${transaction.kodeTransaksi}\n")
+        sb.append("Tgl: $dateStr\n")
+        if (transaction.customerName.isNotBlank()) {
+            sb.append("Pelanggan: ${transaction.customerName}\n")
+        }
+        sb.append("-".repeat(lineWidth) + "\n")
+        
+        transaction.items.forEach { item ->
+            val qtyStr = "${item.qty} x "
+            val namaLines = item.namaBarang.chunked(lineWidth - qtyStr.length)
+            
+            sb.append(qtyStr + namaLines.firstOrNull().orEmpty() + "\n")
+            for (i in 1 until namaLines.size) {
+                sb.append(" ".repeat(qtyStr.length) + namaLines[i] + "\n")
+            }
+        }
+        
+        sb.append("-".repeat(lineWidth) + "\n")
         return sb.toString()
     }
 

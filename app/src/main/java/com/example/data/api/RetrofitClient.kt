@@ -11,7 +11,7 @@ import retrofit2.converter.moshi.MoshiConverterFactory
 import java.util.concurrent.TimeUnit
 
 object RetrofitClient {
-    private const val BASE_URL = "http://sambalradja.berandahukum.com" // Connection to local server by IP address
+    private const val BASE_URL = "http://10.153.38.30:8000" // Connection to local server by IP address
 
     private val moshi: Moshi = Moshi.Builder()
         .addLast(KotlinJsonAdapterFactory())

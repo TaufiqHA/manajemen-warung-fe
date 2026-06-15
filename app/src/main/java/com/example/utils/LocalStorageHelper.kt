@@ -149,6 +149,131 @@ class LocalStorageHelper(private val context: Context) {
         prefs.edit().putString("nested_transaction_history", json).apply()
     }
 
+    fun updateTransactionStatus(kodeTransaksi: String, newStatus: String) {
+        val list = getNestedTransactions().toMutableList()
+        val index = list.indexOfFirst { it.kodeTransaksi == kodeTransaksi }
+        if (index != -1) {
+            list[index] = list[index].copy(status = newStatus)
+            saveNestedTransactions(list)
+        }
+        
+        // Update flat list for dashboard filtering
+        val flatList = getTransaksiList().toMutableList()
+        var flatUpdated = false
+        for (i in flatList.indices) {
+            if (flatList[i].idTransaksi == kodeTransaksi) {
+                flatList[i] = flatList[i].copy(orderStatus = newStatus)
+                flatUpdated = true
+            }
+        }
+        if (flatUpdated) saveTransaksiList(flatList)
+
+        // 3. Post status update to API in background
+        @kotlin.OptIn(kotlinx.coroutines.DelicateCoroutinesApi::class)
+        kotlinx.coroutines.GlobalScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+            try {
+                com.example.data.api.RetrofitClient.getTransactionApiService(context).updateTransactionStatus(
+                    transactionId = kodeTransaksi,
+                    request = com.example.data.UpdateStatusRequest(status = newStatus)
+                )
+            } catch (e: Exception) {
+                // Ignore for offline mode. Idealnya disimpan ke antrean offline 'unsynced_status_updates'
+                android.util.Log.e("LocalStorageHelper", "Failed to sync status update to server", e)
+            }
+        }
+    }
+
+    fun updateItemServedQty(kodeTransaksi: String, itemId: String, newServedQty: Int) {
+        val list = getNestedTransactions().toMutableList()
+        val txIndex = list.indexOfFirst { it.kodeTransaksi == kodeTransaksi }
+        if (txIndex != -1) {
+            val transaction = list[txIndex]
+            val newItems = transaction.items.toMutableList()
+            val itemIndex = newItems.indexOfFirst { it.itemId == itemId }
+            if (itemIndex != -1) {
+                newItems[itemIndex] = newItems[itemIndex].copy(servedQty = newServedQty)
+                list[txIndex] = transaction.copy(items = newItems)
+                saveNestedTransactions(list)
+            }
+        }
+    }
+
+    fun addItemsToTransaction(kodeTransaksi: String, newItem: com.example.data.TransactionItem) {
+        val list = getNestedTransactions().toMutableList()
+        val index = list.indexOfFirst { it.kodeTransaksi == kodeTransaksi }
+        if (index != -1) {
+            val transaction = list[index]
+            val currentItems = transaction.items.toMutableList()
+            
+            // Check if item already exists
+            val existingItemIndex = currentItems.indexOfFirst { it.itemId == newItem.itemId }
+            if (existingItemIndex != -1) {
+                val existingItem = currentItems[existingItemIndex]
+                currentItems[existingItemIndex] = existingItem.copy(
+                    qty = existingItem.qty + newItem.qty,
+                    subTotal = existingItem.subTotal + newItem.subTotal
+                )
+            } else {
+                currentItems.add(newItem)
+            }
+            
+            // Recalculate totals
+            val newTotalHarga = currentItems.sumOf { it.subTotal }
+            val newDiskonNominal = (newTotalHarga * transaction.diskonPersen / 100).toLong()
+            val newTotalSetelahDiskon = newTotalHarga - newDiskonNominal
+            
+            list[index] = transaction.copy(
+                items = currentItems,
+                totalHarga = newTotalHarga,
+                diskonNominal = newDiskonNominal,
+                totalSetelahDiskon = newTotalSetelahDiskon
+            )
+            saveNestedTransactions(list)
+            
+            // Update flat list
+            val flatList = getTransaksiList().toMutableList()
+            val apiFormatter = java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'", java.util.Locale.getDefault())
+            apiFormatter.timeZone = java.util.TimeZone.getTimeZone("UTC")
+            val timeStr = apiFormatter.format(java.util.Date(transaction.tanggalTransaksi))
+            
+            flatList.removeAll { it.idTransaksi == kodeTransaksi }
+            currentItems.forEach { item ->
+                val flatItem = TransaksiHarian(
+                    idTransaksi = transaction.kodeTransaksi,
+                    id = item.itemId,
+                    namaItem = item.namaBarang,
+                    jumlah = item.qty,
+                    harga = item.harga.toDouble(),
+                    waktu = timeStr,
+                    dicatatOleh = "Admin Toko",
+                    catatan = "Via: Tambahan",
+                    metodePembayaran = "CASH",
+                    orderStatus = transaction.status
+                )
+                flatList.add(flatItem)
+            }
+            saveTransaksiList(flatList)
+            
+            // API Sync
+            @kotlin.OptIn(kotlinx.coroutines.DelicateCoroutinesApi::class)
+            kotlinx.coroutines.GlobalScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+                try {
+                    com.example.data.api.RetrofitClient.getTransactionApiService(context).addTransactionItem(
+                        transactionId = kodeTransaksi,
+                        request = com.example.data.AddTransactionItemRequest(
+                            product_id = newItem.itemId,
+                            quantity = newItem.qty,
+                            unit_price = newItem.harga.toDouble(),
+                            subtotal = newItem.subTotal.toDouble()
+                        )
+                    )
+                } catch (e: Exception) {
+                    android.util.Log.e("LocalStorageHelper", "Failed to sync add item", e)
+                }
+            }
+        }
+    }
+
     fun addTransaction(transaction: Transaction, paymentMethod: String = "Cash") {
         // 1. Add to nested transactions
         val currentNested = getNestedTransactions().toMutableList()
@@ -172,7 +297,8 @@ class LocalStorageHelper(private val context: Context) {
                 waktu = timeStr,
                 dicatatOleh = "Admin Toko",
                 catatan = "Via: $paymentMethod",
-                metodePembayaran = paymentMethod
+                metodePembayaran = paymentMethod,
+                orderStatus = transaction.status
             )
             currentFlat.add(flatItem)
             newFlatItems.add(flatItem)
@@ -182,12 +308,13 @@ class LocalStorageHelper(private val context: Context) {
         // 3. Post to API in background (dengan antrean offline)
         @kotlin.OptIn(kotlinx.coroutines.DelicateCoroutinesApi::class)
         kotlinx.coroutines.GlobalScope.launch(kotlinx.coroutines.Dispatchers.IO) {
-            val apiItems = newFlatItems.map { 
+            val apiItems = newFlatItems.map { flatIt ->
                 com.example.data.TransactionItemRequest(
-                    namaItem = it.namaItem,
-                    jumlah = it.jumlah,
-                    harga = it.harga,
-                    catatan = it.catatan
+                    namaItem = flatIt.namaItem,
+                    jumlah = flatIt.jumlah,
+                    harga = flatIt.harga,
+                    catatan = flatIt.catatan,
+                    servedQty = transaction.items.find { it.itemId == flatIt.id }?.servedQty ?: 0
                 )
             }
             val request = com.example.data.TransactionRequest(
@@ -195,6 +322,8 @@ class LocalStorageHelper(private val context: Context) {
                 waktu = timeStr,
                 dicatatOleh = "Admin Toko",
                 payment_method = paymentMethod.uppercase(),
+                customerName = transaction.customerName,
+                orderStatus = transaction.status,
                 items = apiItems
             )
             

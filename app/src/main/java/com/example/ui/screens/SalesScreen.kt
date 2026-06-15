@@ -59,6 +59,7 @@ fun SalesScreen(
     var showReceiptDialog by remember { mutableStateOf(false) }
     var receiptText by remember { mutableStateOf("") }
     var currentTransaction by remember { mutableStateOf<Transaction?>(null) }
+    var customerName by remember { mutableStateOf("") }
 
     var isDiscountPercent by remember { mutableStateOf(true) } // true = %, false = Rp
     var discountInput by remember { mutableStateOf("") }
@@ -149,7 +150,16 @@ fun SalesScreen(
                     modifier = Modifier.padding(16.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    Text("Tambah Barang", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                    Text("Buat Pesanan", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+
+                    OutlinedTextField(
+                        value = customerName,
+                        onValueChange = { customerName = it },
+                        label = { Text("Nama Pelanggan / No. Meja") },
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
                     
                     com.example.ui.components.AutocompleteItemDropdown(
                         query = searchQuery,
@@ -369,27 +379,28 @@ fun SalesScreen(
             
             Button(
                 onClick = {
-                    if (viewModel.cartItems.isNotEmpty() && discountError == null) {
+                    if (viewModel.cartItems.isNotEmpty() && discountError == null && customerName.isNotBlank()) {
                         val transaction = viewModel.processTransaction(
+                            customerName = customerName,
                             diskonPersen = if (isDiscountPercent) discountValue else 0.0,
                             diskonNominal = nominalDiskon,
                             totalSetelahDiskon = totalAkhir,
                             paymentMethod = paymentMethod
                         )
                         currentTransaction = transaction
-                        receiptText = viewModel.formatReceipt(transaction)
+                        receiptText = viewModel.formatKitchenReceipt(transaction)
                         showReceiptDialog = true
                     }
                 },
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(56.dp),
-                enabled = viewModel.cartItems.isNotEmpty() && discountError == null,
+                enabled = viewModel.cartItems.isNotEmpty() && discountError == null && customerName.isNotBlank(),
                 shape = RoundedCornerShape(12.dp)
             ) {
                 Icon(AppIcons.Print, contentDescription = null)
                 Spacer(modifier = Modifier.width(8.dp))
-                Text("Proses & Cetak Struk", fontSize = 18.sp)
+                Text("Buat Pesanan & Cetak Dapur", fontSize = 18.sp)
             }
         }
     }
@@ -400,9 +411,10 @@ fun SalesScreen(
                 showReceiptDialog = false
                 viewModel.clearCart()
                 discountInput = ""
+                customerName = ""
                 paymentMethod = "Cash"
             },
-            title = { Text("Struk Penjualan") },
+            title = { Text("Struk Dapur") },
             text = {
                 Surface(
                     modifier = Modifier.fillMaxWidth(),
@@ -507,6 +519,7 @@ fun SalesScreen(
                     showReceiptDialog = false 
                     viewModel.clearCart()
                     discountInput = ""
+                    customerName = ""
                 }) {
                     Text("Selesai")
                 }

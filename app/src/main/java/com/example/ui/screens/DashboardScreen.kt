@@ -68,6 +68,7 @@ import java.util.Locale
 enum class DashboardTab(val label: String) {
     Beranda("Beranda"),
     Penjualan("Penjualan"),
+    PesananAktif("Pesanan"),
     ManajemenBarang("Barang"),
     LabaRugi("Laba Rugi"),
     Biaya("Biaya"),
@@ -101,6 +102,12 @@ val allMenus = listOf(
         title = "Penjualan",
         icon = AppIcons.Transaction,
         tab = DashboardTab.Penjualan,
+        allowedRoles = listOf(UserRole.ADMIN_TOKO)
+    ),
+    DashboardMenu(
+        title = "Pesanan",
+        icon = AppIcons.List, // You can use AppIcons.List or similar, fallback to Transaction if not available
+        tab = DashboardTab.PesananAktif,
         allowedRoles = listOf(UserRole.ADMIN_TOKO)
     ),
     DashboardMenu(
@@ -147,7 +154,8 @@ data class TransaksiHarian(
     val waktu: String,
     val dicatatOleh: String,
     val catatan: String = "",
-    @com.squareup.moshi.Json(name = "payment_method") val metodePembayaran: String? = null
+    @com.squareup.moshi.Json(name = "payment_method") val metodePembayaran: String? = null,
+    val orderStatus: String? = null
 )
 
 data class BiayaOperasional(
@@ -265,6 +273,15 @@ fun DashboardScreen(
         storageHelper.saveBiayaList(biayaList)
     }
 
+    // Refresh data sinkronisasi setiap kali user pindah tab (hindari Stale State/data usang)
+    LaunchedEffect(activeTab) {
+        val freshData = storageHelper.getTransaksiList()
+        if (freshData != transaksiList.toList()) {
+            transaksiList.clear()
+            transaksiList.addAll(freshData)
+        }
+    }
+
     LaunchedEffect(Unit) {
         try {
             val response = com.example.data.api.RetrofitClient.getUserApiService(mContext).getCurrentUser()
@@ -376,6 +393,11 @@ fun DashboardScreen(
                         onNavigateToSales = onNavigateToSales
                     )
                 }
+                DashboardTab.PesananAktif -> {
+                    ActiveOrdersTabContent(
+                        menuList = menuList.toList()
+                    )
+                }
                 DashboardTab.ManajemenBarang -> {
                     BarangTabContent(
                         role = role.displayName,
@@ -449,8 +471,10 @@ fun BerandaTabContent(
     // 1. Dapatkan string tanggal hari ini dengan format yyyyMMdd (sesuai format idTransaksi)
     val todayIdStr = java.text.SimpleDateFormat("yyyyMMdd", java.util.Locale.getDefault()).format(java.util.Date())
 
-    // 2. Filter transaksi agar mengambil transaksi yang idTransaksi-nya mengandung tanggal hari ini
-    val todayTransaksiList = transaksiList.filter { it.idTransaksi.contains(todayIdStr) }
+    // 2. Filter transaksi agar mengambil transaksi yang idTransaksi-nya mengandung tanggal hari ini dan sudah COMPLETED
+    val todayTransaksiList = transaksiList.filter { 
+        it.idTransaksi.contains(todayIdStr) && (it.orderStatus == "COMPLETED" || it.orderStatus == null)
+    }
 
     // 3. Hitung total pemasukan hari ini dari list yang sudah difilter
     val totalPenjualanHarian = todayTransaksiList
@@ -594,12 +618,13 @@ fun BerandaTabContent(
                 horizontalArrangement = Arrangement.SpaceEvenly,
                 verticalAlignment = Alignment.Bottom
             ) {
-                // Dynamic Data for Chart from transaksiList
+                // Dynamic Data for Chart from transaksiList (only COMPLETED)
                 val labels = listOf("Sen", "Sel", "Rab", "Kam", "Jum", "Sab", "Min")
                 val counts = remember(transaksiList.toList()) {
                     val arr = IntArray(7)
                     val calendar = java.util.Calendar.getInstance()
-                    transaksiList.forEach { trx ->
+                    val completedList = transaksiList.filter { it.orderStatus == "COMPLETED" || it.orderStatus == null }
+                    completedList.forEach { trx ->
                         try {
                             val dateStr = if (trx.idTransaksi.startsWith("TRX-") && trx.idTransaksi.length >= 12) {
                                 trx.idTransaksi.substring(4, 12)
@@ -772,8 +797,10 @@ fun PenjualanTabContent(
     // 1. Dapatkan string tanggal hari ini dengan format yyyyMMdd (sesuai format idTransaksi)
     val todayIdStr = java.text.SimpleDateFormat("yyyyMMdd", java.util.Locale.getDefault()).format(java.util.Date())
 
-    // 2. Filter transaksi agar mengambil transaksi yang idTransaksi-nya mengandung tanggal hari ini
-    val todayTransaksiList = transaksiList.filter { it.idTransaksi.contains(todayIdStr) }
+    // 2. Filter transaksi agar mengambil transaksi yang idTransaksi-nya mengandung tanggal hari ini dan sudah COMPLETED
+    val todayTransaksiList = transaksiList.filter { 
+        it.idTransaksi.contains(todayIdStr) && (it.orderStatus == "COMPLETED" || it.orderStatus == null)
+    }
 
     // 3. Hitung total penjualan harian
     val totalPenjualanHarian = todayTransaksiList
@@ -920,6 +947,8 @@ fun PenjualanTabContent(
                                 val isExpanded = expandedStates[trxId] ?: false
                             val totalTrxPrice = itemsInTrx.sumOf { it.jumlah * it.harga }
                             val totalItems = itemsInTrx.size
+                            val orderStatus = itemsInTrx.firstOrNull()?.orderStatus
+                            val isCompletedOrNull = orderStatus == "COMPLETED" || orderStatus == null
                             val rawTime = itemsInTrx.firstOrNull()?.waktu ?: ""
                             val time = try {
                                 if (rawTime.contains("T")) {
@@ -991,7 +1020,9 @@ fun PenjualanTabContent(
                                             .wrapContentHeight()
                                             .animateContentSize()
                                             .clickable { expandedStates[trxId] = !isExpanded },
-                                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                                        colors = CardDefaults.cardColors(
+                                            containerColor = if (!isCompletedOrNull && !isCanceled) Color(0xFFFFF9C4.toInt()) else MaterialTheme.colorScheme.surface
+                                        ),
                                         shape = RoundedCornerShape(8.dp)
                                     ) {
                                         Column(modifier = Modifier.padding(12.dp)) {

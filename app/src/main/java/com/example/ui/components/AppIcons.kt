@@ -14,6 +14,7 @@ object AppIcons {
     val Settings: ImageVector = Icons.Rounded.Settings
     val Profile: ImageVector = Icons.Rounded.Person
     val Store: ImageVector = Icons.Rounded.Storefront
+    val List: ImageVector = Icons.Rounded.List
 
     // Actions
     val Add: ImageVector = Icons.Rounded.Add
