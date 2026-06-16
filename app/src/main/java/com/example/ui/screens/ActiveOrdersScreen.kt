@@ -40,6 +40,7 @@ fun ActiveOrdersTabContent(
     val salesViewModel: SalesViewModel = viewModel()
     
     var showReceiptDialog by remember { mutableStateOf<Transaction?>(null) }
+    var showKitchenReceiptDialog by remember { mutableStateOf<Transaction?>(null) }
     var showAddItemDialog by remember { mutableStateOf<Transaction?>(null) }
 
     Column(
@@ -87,6 +88,9 @@ fun ActiveOrdersTabContent(
                                     nestedTransactions = storageHelper.getNestedTransactions()
                                 }
                             }
+                        },
+                        onPrintDapur = {
+                            showKitchenReceiptDialog = order
                         },
                         onAddItemsClick = {
                             showAddItemDialog = order
@@ -156,6 +160,7 @@ fun ActiveOrdersTabContent(
                             servedQty = 0
                         )
                         storageHelper.addItemsToTransaction(transaction.kodeTransaksi, newItem)
+                        storageHelper.updateTransactionStatus(transaction.kodeTransaksi, "PENDING")
                         nestedTransactions = storageHelper.getNestedTransactions()
                     }
                     showAddItemDialog = null
@@ -211,6 +216,57 @@ fun ActiveOrdersTabContent(
             }
         )
     }
+
+    if (showKitchenReceiptDialog != null) {
+        val transaction = showKitchenReceiptDialog!!
+        // Format Struk Dapur manually here for simplicity, or add it to ViewModel
+        val kitchenReceiptText = buildString {
+            appendLine("===== STRUK DAPUR =====")
+            appendLine("No : ${transaction.kodeTransaksi}")
+            appendLine("Jam: ${SimpleDateFormat("HH:mm", Locale.getDefault()).format(Date(transaction.tanggalTransaksi))}")
+            appendLine("Plg: ${transaction.customerName.ifBlank { "Umum" }}")
+            appendLine("-----------------------")
+            transaction.items.forEach { item ->
+                appendLine("${item.qty}x ${item.namaBarang}")
+            }
+            appendLine("-----------------------")
+        }
+        
+        AlertDialog(
+            onDismissRequest = { showKitchenReceiptDialog = null },
+            title = { Text("Struk Dapur") },
+            text = {
+                Surface(
+                    modifier = Modifier.fillMaxWidth(),
+                    color = Color.White,
+                    shape = RoundedCornerShape(4.dp),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, Color.LightGray)
+                ) {
+                    Text(
+                        text = kitchenReceiptText,
+                        modifier = Modifier.padding(16.dp),
+                        fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
+                        fontSize = 12.sp,
+                        color = Color.Black
+                    )
+                }
+            },
+            confirmButton = {
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    TextButton(onClick = { showKitchenReceiptDialog = null }) {
+                        Text("Tutup")
+                    }
+                    Button(onClick = { 
+                        showKitchenReceiptDialog = null 
+                    }) {
+                        Text("Print")
+                    }
+                }
+            }
+        )
+    }
 }
 
 @Composable
@@ -219,6 +275,7 @@ fun OrderCard(
     onMarkReady: () -> Unit,
     onProcessPayment: () -> Unit,
     onUpdateItemServedQty: (String, Int) -> Unit,
+    onPrintDapur: () -> Unit,
     onAddItemsClick: () -> Unit
 ) {
     val sdf = SimpleDateFormat("HH:mm", Locale.getDefault())
@@ -324,16 +381,21 @@ fun OrderCard(
                     modifier = Modifier.weight(1f)
                 )
                 
-                if (!isReady) {
-                    TextButton(onClick = onAddItemsClick, modifier = Modifier.padding(end = 8.dp)) {
-                        Text("+ Tambah Item")
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    TextButton(onClick = onPrintDapur) {
+                        Text("Print Dapur")
                     }
-                    OutlinedButton(onClick = onMarkReady) {
-                        Text("Selesai Dibuat")
+                    TextButton(onClick = onAddItemsClick, modifier = Modifier.padding(horizontal = 4.dp)) {
+                        Text("+ Item")
                     }
-                } else {
-                    Button(onClick = onProcessPayment) {
-                        Text("Bayar & Cetak")
+                    if (!isReady) {
+                        OutlinedButton(onClick = onMarkReady) {
+                            Text("Selesai")
+                        }
+                    } else {
+                        Button(onClick = onProcessPayment) {
+                            Text("Bayar & Cetak")
+                        }
                     }
                 }
             }

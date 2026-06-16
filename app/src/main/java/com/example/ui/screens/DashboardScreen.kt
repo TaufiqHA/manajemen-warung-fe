@@ -68,7 +68,6 @@ import java.util.Locale
 enum class DashboardTab(val label: String) {
     Beranda("Beranda"),
     Penjualan("Penjualan"),
-    PesananAktif("Pesanan"),
     ManajemenBarang("Barang"),
     LabaRugi("Laba Rugi"),
     Biaya("Biaya"),
@@ -102,12 +101,6 @@ val allMenus = listOf(
         title = "Penjualan",
         icon = AppIcons.Transaction,
         tab = DashboardTab.Penjualan,
-        allowedRoles = listOf(UserRole.ADMIN_TOKO)
-    ),
-    DashboardMenu(
-        title = "Pesanan",
-        icon = AppIcons.List, // You can use AppIcons.List or similar, fallback to Transaction if not available
-        tab = DashboardTab.PesananAktif,
         allowedRoles = listOf(UserRole.ADMIN_TOKO)
     ),
     DashboardMenu(
@@ -377,6 +370,7 @@ fun DashboardScreen(
                         role = role.displayName,
                         userName = userName,
                         transaksiList = transaksiList,
+                        menuList = menuList,
                         visibleMenus = visibleMenus,
                         onNavigateTab = { activeTab = it },
                         snackbarHostState = snackbarHostState,
@@ -393,11 +387,7 @@ fun DashboardScreen(
                         onNavigateToSales = onNavigateToSales
                     )
                 }
-                DashboardTab.PesananAktif -> {
-                    ActiveOrdersTabContent(
-                        menuList = menuList.toList()
-                    )
-                }
+
                 DashboardTab.ManajemenBarang -> {
                     BarangTabContent(
                         role = role.displayName,
@@ -458,6 +448,7 @@ fun BerandaTabContent(
     role: String,
     userName: String,
     transaksiList: List<TransaksiHarian>,
+    menuList: List<MenuItem>,
     biayaList: List<BiayaOperasional>,
     visibleMenus: List<DashboardMenu>,
     onNavigateTab: (DashboardTab) -> Unit,
@@ -696,6 +687,21 @@ fun BerandaTabContent(
                 }
             }
         }
+
+        Spacer(modifier = Modifier.height(32.dp))
+        
+        // Active Orders (Open Bill) directly in Beranda
+        Text(
+            text = "ORDERAN AKTIF (OPEN BILL)",
+            style = MaterialTheme.typography.titleSmall,
+            fontWeight = FontWeight.Bold
+        )
+        Spacer(modifier = Modifier.height(12.dp))
+        ActiveOrdersTabContent(
+            menuList = menuList,
+            modifier = Modifier.fillMaxWidth().heightIn(min = 200.dp, max = 500.dp) // Wrap in a constrained box to fit inside scrollview
+        )
+        Spacer(modifier = Modifier.height(48.dp))
     }
 }
 
@@ -899,7 +905,8 @@ fun PenjualanTabContent(
 
             // Grouping: Pertama gabungkan item per struk (idTransaksi), lalu urutkan dari yang terbaru, lalu group berdasarkan Tanggal
             val groupedByDate = remember(transaksiList.toList()) {
-                val trxsById = transaksiList.groupBy { it.idTransaksi }
+                val completedList = transaksiList.filter { it.orderStatus == "COMPLETED" || it.orderStatus == null }
+                val trxsById = completedList.groupBy { it.idTransaksi }
                 trxsById.entries
                     .sortedByDescending { it.value.firstOrNull()?.waktu ?: "" }
                     .groupBy { entry -> 
