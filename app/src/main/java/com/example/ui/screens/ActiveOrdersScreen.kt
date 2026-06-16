@@ -3,6 +3,8 @@ package com.example.ui.screens
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -103,7 +105,11 @@ fun ActiveOrdersTabContent(
 
     if (showAddItemDialog != null) {
         val transaction = showAddItemDialog!!
-        var selectedItem by remember { mutableStateOf<MenuItem?>(menuList.firstOrNull()) }
+        var searchQuery by remember { mutableStateOf("") }
+        val filteredMenu = menuList.filter { 
+            it.nama.contains(searchQuery, ignoreCase = true) 
+        }
+        var selectedItem by remember(searchQuery) { mutableStateOf<MenuItem?>(filteredMenu.firstOrNull()) }
         var quantity by remember { mutableStateOf(1) }
 
         AlertDialog(
@@ -114,9 +120,18 @@ fun ActiveOrdersTabContent(
                     Text("Pilih menu tambahan untuk: ${transaction.customerName.ifBlank { "Pelanggan" }}")
                     Spacer(modifier = Modifier.height(16.dp))
                     
+                    OutlinedTextField(
+                        value = searchQuery,
+                        onValueChange = { searchQuery = it },
+                        label = { Text("Cari menu...") },
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    
                     // Simple dropdown simulation (or LazyColumn of items)
                     LazyColumn(modifier = Modifier.heightIn(max = 200.dp)) {
-                        items(menuList) { menu ->
+                        items(filteredMenu) { menu ->
                             val isSelected = selectedItem?.id == menu.id
                             Row(
                                 modifier = Modifier
@@ -278,7 +293,7 @@ fun OrderCard(
     onPrintDapur: () -> Unit,
     onAddItemsClick: () -> Unit
 ) {
-    val sdf = SimpleDateFormat("HH:mm", Locale.getDefault())
+    val sdf = SimpleDateFormat("dd/MM/yyyy HH:mm", Locale.getDefault())
     val timeStr = sdf.format(Date(order.tanggalTransaksi))
     
     val isReady = order.status == "READY"
@@ -293,15 +308,16 @@ fun OrderCard(
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
+                verticalAlignment = Alignment.Top
             ) {
-                Column {
+                Column(modifier = Modifier.weight(1f).padding(end = 8.dp)) {
                     Text(
-                        text = order.customerName.ifBlank { "Pelanggan Umum" },
+                        text = order.customerName.ifBlank { order.kodeTransaksi },
                         fontWeight = FontWeight.Bold,
                         fontSize = 18.sp
                     )
-                    Text(text = "Jam: $timeStr | No: ${order.kodeTransaksi}", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
+                    val bottomText = if (order.customerName.isBlank()) "Waktu: $timeStr" else "Waktu: $timeStr\nNo: ${order.kodeTransaksi}"
+                    Text(text = bottomText, style = MaterialTheme.typography.bodySmall, color = Color.Gray)
                 }
                 
                 Surface(
@@ -309,7 +325,7 @@ fun OrderCard(
                     shape = RoundedCornerShape(8.dp)
                 ) {
                     Text(
-                        text = if (isReady) "SIAP DISAJIKAN" else "DIPROSES DAPUR",
+                        text = if (isReady) "SIAP" else "DAPUR",
                         color = Color.White,
                         fontSize = 10.sp,
                         fontWeight = FontWeight.Bold,
@@ -369,19 +385,22 @@ fun OrderCard(
             
             Spacer(modifier = Modifier.height(16.dp))
             
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.End,
-                verticalAlignment = Alignment.CenterVertically
+            Column(
+                modifier = Modifier.fillMaxWidth()
             ) {
                 Text(
                     text = "Total: ${formatRupiah(order.totalSetelahDiskon)}",
                     fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.weight(1f)
+                    color = MaterialTheme.colorScheme.primary
                 )
                 
-                Row(verticalAlignment = Alignment.CenterVertically) {
+                Spacer(modifier = Modifier.height(8.dp))
+                
+                @OptIn(ExperimentalLayoutApi::class)
+                FlowRow(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.End,
+                ) {
                     TextButton(onClick = onPrintDapur) {
                         Text("Print Dapur")
                     }
