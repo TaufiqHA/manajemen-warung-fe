@@ -52,6 +52,9 @@ class SalesViewModel(application: Application) : AndroidViewModel(application) {
             try {
                 val response = com.example.data.api.RetrofitClient.getTransactionApiService(getApplication()).getTransactions()
                 if (response.isSuccessful && response.body()?.data != null) {
+                    // Berhasil konek, otomatis sinkronisasi data offline
+                    storageHelper.syncUnsyncedData()
+                    
                     val flatList = response.body()!!.data!!
                     val grouped = flatList.groupBy { it.idTransaksi }
                     val newTransactions = grouped.map { (idTx, items) ->
@@ -92,9 +95,18 @@ class SalesViewModel(application: Application) : AndroidViewModel(application) {
                         if (index != -1) {
                             val localTx = localTransactions[index]
                             var txChanged = false
+                            
+                            var resolvedStatus = newTx.status
                             if (localTx.status != newTx.status) {
-                                txChanged = true
+                                val lastUpdate = storageHelper.getLastStatusUpdateTime(localTx.kodeTransaksi)
+                                if (System.currentTimeMillis() - lastUpdate < 15000) {
+                                    // Ignore server status if we just updated it locally within 15 seconds
+                                    resolvedStatus = localTx.status
+                                } else {
+                                    txChanged = true
+                                }
                             }
+                            
                             val mergedItems = newTx.items.map { newIt ->
                                 val localIt = localTx.items.find { it.itemId == newIt.itemId }
                                 newIt.copy(servedQty = localIt?.servedQty ?: 0)
@@ -104,7 +116,7 @@ class SalesViewModel(application: Application) : AndroidViewModel(application) {
                             }
                             if (txChanged) {
                                 localTransactions[index] = localTx.copy(
-                                    status = newTx.status,
+                                    status = resolvedStatus,
                                     items = mergedItems,
                                     totalHarga = newTx.totalHarga,
                                     totalSetelahDiskon = newTx.totalSetelahDiskon
@@ -118,9 +130,11 @@ class SalesViewModel(application: Application) : AndroidViewModel(application) {
                     }
 
                     if (hasChanges) {
+                        storageHelper.saveTransaksiList(flatList)
                         storageHelper.saveNestedTransactions(localTransactions)
                         _activeOrders.value = localTransactions
                     } else if (_activeOrders.value != localTransactions) {
+                        storageHelper.saveTransaksiList(flatList)
                         _activeOrders.value = localTransactions
                     }
                 }
@@ -145,8 +159,10 @@ class SalesViewModel(application: Application) : AndroidViewModel(application) {
     ) {
         viewModelScope.launch(Dispatchers.IO) {
             try {
+                // Prevent sending invalid product_id by setting it to null for custom/unknown items
+                val isUnknownProduct = storageHelper.getMenuList().none { it.id == newItem.itemId }
                 val request = com.example.data.AddTransactionItemRequest(
-                    product_id = newItem.itemId,
+                    product_id = if (isUnknownProduct) null else newItem.itemId,
                     quantity = newItem.qty,
                     unit_price = newItem.harga.toDouble(),
                     subtotal = newItem.subTotal.toDouble()
@@ -186,6 +202,38 @@ class SalesViewModel(application: Application) : AndroidViewModel(application) {
                 }
             } catch (e: Exception) {
                 launch(Dispatchers.Main) {
+                    onError("Terjadi kesalahan koneksi: ${e.message}")
+                }
+            }
+        }
+    }
+
+    fun removeItemFromActiveOrder(
+        kodeTransaksi: String, 
+        itemId: String, 
+        onSuccess: () -> Unit, 
+        onError: (String) -> Unit
+    ) {
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                val response = com.example.data.api.RetrofitClient.getTransactionApiService(getApplication())
+                    .removeTransactionItem(kodeTransaksi, itemId)
+                    
+                if (response.isSuccessful) {
+                    storageHelper.removeItemFromTransaction(kodeTransaksi, itemId)
+                    fetchActiveOrders()
+                    launch(Dispatchers.Main) {
+                        onSuccess()
+                    }
+                } else {
+                    launch(Dispatchers.Main) {
+                        onError("Gagal menghapus item: ${response.message()}")
+                    }
+                }
+            } catch (e: Exception) {
+                launch(Dispatchers.Main) {
+                    // Jika gagal koneksi (offline), terapkan secara lokal sementara?
+                    // Karena ini penghapusan, jika gagal koneksi lebih baik tidak diizinkan untuk menghindari inkonsistensi
                     onError("Terjadi kesalahan koneksi: ${e.message}")
                 }
             }

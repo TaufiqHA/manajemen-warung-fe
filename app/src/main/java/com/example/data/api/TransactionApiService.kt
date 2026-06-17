@@ -36,6 +36,12 @@ interface TransactionApiService {
         @Body request: com.example.data.AddTransactionItemRequest
     ): Response<BaseResponse<Any>>
 
+    @DELETE("api/v1/transactions/{id}/items/{itemId}")
+    suspend fun removeTransactionItem(
+        @Path("id") transactionId: String,
+        @Path("itemId") itemId: String
+    ): Response<BaseResponse<Any>>
+
     /**
      * Endpoint untuk menghapus transaksi permanen.
      * Hanya pengguna dengan role ADMIN_TOKO yang diizinkan (ditangani server).

@@ -60,8 +60,13 @@ data class UpdateStatusRequest(
 )
 
 data class AddTransactionItemRequest(
-    val product_id: String,
+    val product_id: String?,
     val quantity: Int,
     val unit_price: Double,
     val subtotal: Double
+)
+
+data class UnsyncedStatusUpdate(
+    val transactionId: String,
+    val status: String
 )

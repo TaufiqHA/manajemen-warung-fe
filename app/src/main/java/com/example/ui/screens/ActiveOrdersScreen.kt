@@ -167,18 +167,34 @@ fun ActiveOrdersTabContent(
             },
             dismissButton = {
                 Row {
+                    var isDeleting by remember { mutableStateOf(false) }
                     TextButton(
                         onClick = {
-                            storageHelper.removeItemFromTransaction(transaction.kodeTransaksi, item.itemId)
-                            salesViewModel.syncLocalActiveOrders()
-                            itemToEdit = null
+                            if (isDeleting) return@TextButton
+                            isDeleting = true
+                            salesViewModel.removeItemFromActiveOrder(
+                                kodeTransaksi = transaction.kodeTransaksi,
+                                itemId = item.itemId,
+                                onSuccess = {
+                                    isDeleting = false
+                                    itemToEdit = null
+                                },
+                                onError = { errorMsg ->
+                                    isDeleting = false
+                                    android.widget.Toast.makeText(context, errorMsg, android.widget.Toast.LENGTH_SHORT).show()
+                                }
+                            )
                         },
-                        colors = ButtonDefaults.textButtonColors(contentColor = Color.Red)
+                        colors = ButtonDefaults.textButtonColors(contentColor = Color.Red),
+                        enabled = !isDeleting
                     ) {
-                        Text("Hapus Item")
+                        Text(if (isDeleting) "Menghapus..." else "Hapus Item")
                     }
                     Spacer(modifier = Modifier.width(8.dp))
-                    TextButton(onClick = { itemToEdit = null }) {
+                    TextButton(
+                        onClick = { itemToEdit = null },
+                        enabled = !isDeleting
+                    ) {
                         Text("Batal")
                     }
                 }

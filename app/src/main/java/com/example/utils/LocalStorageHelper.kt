@@ -36,6 +36,11 @@ class LocalStorageHelper(private val context: Context) {
     private val unsyncedTrxListType = Types.newParameterizedType(List::class.java, com.example.data.TransactionRequest::class.java)
     private val unsyncedTrxListAdapter = moshi.adapter<List<com.example.data.TransactionRequest>>(unsyncedTrxListType)
 
+    private val unsyncedStatusListType = Types.newParameterizedType(List::class.java, com.example.data.UnsyncedStatusUpdate::class.java)
+    private val unsyncedStatusListAdapter = moshi.adapter<List<com.example.data.UnsyncedStatusUpdate>>(unsyncedStatusListType)
+
+    private val lastStatusUpdateMap = mutableMapOf<String, Long>()
+
     fun getUnsyncedTransactions(): List<com.example.data.TransactionRequest> {
         val json = prefs.getString("unsynced_transactions", null)
         return if (json != null) {
@@ -47,6 +52,10 @@ class LocalStorageHelper(private val context: Context) {
         } else {
             emptyList()
         }
+    }
+
+    fun getLastStatusUpdateTime(kodeTransaksi: String): Long {
+        return lastStatusUpdateMap[kodeTransaksi] ?: 0L
     }
 
     fun saveUnsyncedTransactions(list: List<com.example.data.TransactionRequest>) {
@@ -63,10 +72,41 @@ class LocalStorageHelper(private val context: Context) {
         }
     }
 
-    fun removeUnsyncedTransaction(idTransaksi: String) {
-        val current = getUnsyncedTransactions().toMutableList()
-        current.removeAll { it.idTransaksi == idTransaksi }
-        saveUnsyncedTransactions(current)
+    fun removeUnsyncedTransaction(transactionId: String) {
+        val list = getUnsyncedTransactions().toMutableList()
+        list.removeAll { it.idTransaksi == transactionId }
+        saveUnsyncedTransactions(list)
+    }
+
+    fun getUnsyncedStatusUpdates(): List<com.example.data.UnsyncedStatusUpdate> {
+        val json = prefs.getString("unsynced_status_updates", null)
+        return if (json != null) {
+            try {
+                unsyncedStatusListAdapter.fromJson(json) ?: emptyList()
+            } catch (e: Exception) {
+                emptyList()
+            }
+        } else {
+            emptyList()
+        }
+    }
+
+    fun saveUnsyncedStatusUpdates(list: List<com.example.data.UnsyncedStatusUpdate>) {
+        val json = unsyncedStatusListAdapter.toJson(list)
+        prefs.edit().putString("unsynced_status_updates", json).apply()
+    }
+
+    fun addUnsyncedStatusUpdate(update: com.example.data.UnsyncedStatusUpdate) {
+        val list = getUnsyncedStatusUpdates().toMutableList()
+        list.removeAll { it.transactionId == update.transactionId }
+        list.add(update)
+        saveUnsyncedStatusUpdates(list)
+    }
+
+    fun removeUnsyncedStatusUpdate(transactionId: String) {
+        val list = getUnsyncedStatusUpdates().toMutableList()
+        list.removeAll { it.transactionId == transactionId }
+        saveUnsyncedStatusUpdates(list)
     }
 
     fun getMenuList(): List<MenuItem> {
@@ -150,6 +190,7 @@ class LocalStorageHelper(private val context: Context) {
     }
 
     fun updateTransactionStatus(kodeTransaksi: String, newStatus: String) {
+        lastStatusUpdateMap[kodeTransaksi] = System.currentTimeMillis()
         val list = getNestedTransactions().toMutableList()
         val index = list.indexOfFirst { it.kodeTransaksi == kodeTransaksi }
         if (index != -1) {
@@ -176,9 +217,10 @@ class LocalStorageHelper(private val context: Context) {
                     transactionId = kodeTransaksi,
                     request = com.example.data.UpdateStatusRequest(status = newStatus)
                 )
+                removeUnsyncedStatusUpdate(kodeTransaksi)
             } catch (e: Exception) {
-                // Ignore for offline mode. Idealnya disimpan ke antrean offline 'unsynced_status_updates'
-                android.util.Log.e("LocalStorageHelper", "Failed to sync status update to server", e)
+                addUnsyncedStatusUpdate(com.example.data.UnsyncedStatusUpdate(kodeTransaksi, newStatus))
+                android.util.Log.e("LocalStorageHelper", "Failed to sync status update to server, queued for offline", e)
             }
         }
     }
@@ -258,10 +300,12 @@ class LocalStorageHelper(private val context: Context) {
             @kotlin.OptIn(kotlinx.coroutines.DelicateCoroutinesApi::class)
             kotlinx.coroutines.GlobalScope.launch(kotlinx.coroutines.Dispatchers.IO) {
                 try {
+                    // Prevent sending invalid product_id by setting it to null for custom/unknown items
+                    val isUnknownProduct = getMenuList().none { it.id == newItem.itemId }
                     com.example.data.api.RetrofitClient.getTransactionApiService(context).addTransactionItem(
                         transactionId = kodeTransaksi,
                         request = com.example.data.AddTransactionItemRequest(
-                            product_id = newItem.itemId,
+                            product_id = if (isUnknownProduct) null else newItem.itemId,
                             quantity = newItem.qty,
                             unit_price = newItem.harga.toDouble(),
                             subtotal = newItem.subTotal.toDouble()
@@ -274,7 +318,7 @@ class LocalStorageHelper(private val context: Context) {
         }
     }
 
-    fun addTransaction(transaction: Transaction, paymentMethod: String = "Cash") {
+    fun addTransaction(transaction: Transaction, paymentMethod: String = "CASH") {
         // 1. Add to nested transactions
         val currentNested = getNestedTransactions().toMutableList()
         currentNested.add(transaction)
@@ -337,14 +381,14 @@ class LocalStorageHelper(private val context: Context) {
     }
 
     fun syncUnsyncedData() {
+        val unsynced = getUnsyncedTransactions()
+        val unsyncedStatus = getUnsyncedStatusUpdates()
+        if (unsynced.isEmpty() && unsyncedStatus.isEmpty()) return
+
+        val apiService = com.example.data.api.RetrofitClient.getTransactionApiService(context)
         @kotlin.OptIn(kotlinx.coroutines.DelicateCoroutinesApi::class)
         kotlinx.coroutines.GlobalScope.launch(kotlinx.coroutines.Dispatchers.IO) {
-            val unsyncedList = getUnsyncedTransactions()
-            if (unsyncedList.isEmpty()) return@launch
-
-            val apiService = com.example.data.api.RetrofitClient.getTransactionApiService(context)
-            
-            for (request in unsyncedList) {
+            for (request in unsynced) {
                 try {
                     // Coba kirim ulang ke server
                     apiService.createTransaction(request)
@@ -352,6 +396,18 @@ class LocalStorageHelper(private val context: Context) {
                     request.idTransaksi?.let { removeUnsyncedTransaction(it) }
                 } catch (e: Exception) {
                     // Jika masih gagal, biarkan saja di dalam antrean untuk percobaan berikutnya
+                }
+            }
+            
+            for (statusUpdate in unsyncedStatus) {
+                try {
+                    apiService.updateTransactionStatus(
+                        transactionId = statusUpdate.transactionId,
+                        request = com.example.data.UpdateStatusRequest(status = statusUpdate.status)
+                    )
+                    removeUnsyncedStatusUpdate(statusUpdate.transactionId)
+                } catch (e: Exception) {
+                    // Jika gagal, biarkan di antrean
                 }
             }
         }
