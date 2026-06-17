@@ -27,6 +27,17 @@ import java.text.SimpleDateFormat
 import java.util.*
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.ui.viewmodel.SalesViewModel
+import android.bluetooth.BluetoothAdapter
+import android.bluetooth.BluetoothDevice
+import android.content.Context
+import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
+import com.example.data.InvoiceItem
+import com.example.data.TransactionModel
+import com.example.utils.generateQuotationPdf
 
 @Composable
 fun ActiveOrdersTabContent(
@@ -38,6 +49,41 @@ fun ActiveOrdersTabContent(
     val salesViewModel: SalesViewModel = viewModel()
     
     val nestedTransactions by salesViewModel.activeOrders.collectAsState()
+
+    val sharedPrefs = remember { context.getSharedPreferences("printer_prefs", Context.MODE_PRIVATE) }
+    val bluetoothAdapter = remember { BluetoothAdapter.getDefaultAdapter() }
+    var showPrinterDialog by remember { mutableStateOf(false) }
+    var pairedDevicesList by remember { mutableStateOf<List<BluetoothDevice>>(emptyList()) }
+
+    val permissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestMultiplePermissions()
+    ) { permissions ->
+        val connectGranted = permissions[android.Manifest.permission.BLUETOOTH_CONNECT] ?: true
+        if (!connectGranted) {
+            Toast.makeText(context, "Izin Bluetooth dibutuhkan untuk mencetak struk", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    fun checkBluetoothAndPrint(onPermissionGranted: () -> Unit) {
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
+            val hasPermission = androidx.core.content.ContextCompat.checkSelfPermission(
+                context,
+                android.Manifest.permission.BLUETOOTH_CONNECT
+            ) == android.content.pm.PackageManager.PERMISSION_GRANTED
+            if (hasPermission) {
+                onPermissionGranted()
+            } else {
+                permissionLauncher.launch(
+                    arrayOf(
+                        android.Manifest.permission.BLUETOOTH_CONNECT,
+                        android.Manifest.permission.BLUETOOTH_SCAN
+                    )
+                )
+            }
+        } else {
+            onPermissionGranted()
+        }
+    }
 
     LaunchedEffect(Unit) {
         salesViewModel.loadActiveOrders()
@@ -335,19 +381,124 @@ fun ActiveOrdersTabContent(
                     )
                 }
             },
-            confirmButton = {
+            dismissButton = {
                 Row(
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    modifier = Modifier.horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    TextButton(onClick = { showReceiptDialog = null }) {
-                        Text("Tutup")
-                    }
-                    Button(onClick = { 
-                        // Simulate Print or trigger Print Intent
-                        showReceiptDialog = null 
+                    TextButton(onClick = {
+                        val quotationData = TransactionModel(
+                            customerName = transaction.customerName.ifBlank { "Pelanggan Umum" },
+                            customerAddress = "Jl. Raya Warung", 
+                            items = transaction.items.map { 
+                                InvoiceItem(
+                                    name = it.namaBarang,
+                                    qty = it.qty,
+                                    price = it.harga.toDouble()
+                                )
+                            },
+                            salesName = "Kasir",
+                            invoiceCode = transaction.kodeTransaksi,
+                            date = SimpleDateFormat("dd/MM/yyyy", Locale.getDefault()).format(Date(transaction.tanggalTransaksi)),
+                            notes = "Terima kasih atas kunjungan Anda."
+                        )
+                        generateQuotationPdf(context, quotationData, salesViewModel.namaWarungState.value)
                     }) {
-                        Text("Selesai")
+                        Icon(AppIcons.Pdf, contentDescription = null)
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("Export PDF")
                     }
+
+                    TextButton(onClick = {
+                        checkBluetoothAndPrint {
+                            if (bluetoothAdapter == null) {
+                                Toast.makeText(context, "Bluetooth tidak didukung di perangkat ini", Toast.LENGTH_SHORT).show()
+                                return@checkBluetoothAndPrint
+                            }
+                            if (!bluetoothAdapter.isEnabled) {
+                                Toast.makeText(context, "Nyalakan Bluetooth terlebih dahulu", Toast.LENGTH_SHORT).show()
+                                return@checkBluetoothAndPrint
+                            }
+
+                            // Get last used printer
+                            val lastPrinterMac = sharedPrefs.getString("last_printer_mac", null)
+                            val bondedDevices = try { bluetoothAdapter.bondedDevices } catch (e: SecurityException) { emptySet() }
+                            
+                            val lastDevice = bondedDevices.find { it.address == lastPrinterMac }
+                            if (lastDevice != null) {
+                                Toast.makeText(context, "Mencetak ke ${lastDevice.name}...", Toast.LENGTH_SHORT).show()
+                                salesViewModel.printToThermal(lastDevice, receiptText) { success ->
+                                    val message = if (success) "Struk berhasil dicetak" else "Gagal mencetak struk"
+                                    (context as? android.app.Activity)?.runOnUiThread {
+                                        Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
+                                    }
+                                }
+                            } else {
+                                // Show printer selection dialog
+                                pairedDevicesList = bondedDevices.toList()
+                                if (pairedDevicesList.isEmpty()) {
+                                    Toast.makeText(context, "Tidak ada perangkat Bluetooth terpasang (paired). Pasangkan printer terlebih dahulu di pengaturan HP.", Toast.LENGTH_LONG).show()
+                                } else {
+                                    showPrinterDialog = true
+                                }
+                            }
+                        }
+                    }) {
+                        Icon(AppIcons.Print, contentDescription = null)
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("Cetak Struk")
+                    }
+                }
+            },
+            confirmButton = {
+                Button(onClick = { 
+                    showReceiptDialog = null 
+                }) {
+                    Text("Selesai")
+                }
+            }
+        )
+    }
+
+    if (showPrinterDialog) {
+        val transactionForPrint = showReceiptDialog
+        val receiptTextToPrint = if (transactionForPrint != null) salesViewModel.formatReceipt(transactionForPrint) else ""
+        AlertDialog(
+            onDismissRequest = { showPrinterDialog = false },
+            title = { Text("Pilih Printer Bluetooth") },
+            text = {
+                LazyColumn(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    items(pairedDevicesList) { device ->
+                        Card(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable {
+                                    showPrinterDialog = false
+                                    sharedPrefs.edit().putString("last_printer_mac", device.address).apply()
+                                    Toast.makeText(context, "Mencetak ke ${device.name ?: "Printer"}...", Toast.LENGTH_SHORT).show()
+                                    salesViewModel.printToThermal(device, receiptTextToPrint) { success ->
+                                        val message = if (success) "Struk berhasil dicetak" else "Gagal mencetak struk"
+                                        (context as? android.app.Activity)?.runOnUiThread {
+                                            Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
+                                        }
+                                    }
+                                }
+                        ) {
+                            Column(modifier = Modifier.padding(16.dp)) {
+                                Text(device.name ?: "Unknown Device", fontWeight = FontWeight.Bold)
+                                Text(device.address, style = MaterialTheme.typography.bodySmall)
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { showPrinterDialog = false }) {
+                    Text("Batal")
                 }
             }
         )
