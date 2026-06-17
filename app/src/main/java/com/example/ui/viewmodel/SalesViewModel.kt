@@ -36,6 +36,162 @@ class SalesViewModel(application: Application) : AndroidViewModel(application) {
         initialValue = ""
     )
 
+    private val _activeOrders = MutableStateFlow<List<Transaction>>(emptyList())
+    val activeOrders = _activeOrders.asStateFlow()
+
+    fun loadActiveOrders() {
+        _activeOrders.value = storageHelper.getNestedTransactions()
+    }
+
+    fun syncLocalActiveOrders() {
+        _activeOrders.value = storageHelper.getNestedTransactions()
+    }
+
+    fun fetchActiveOrders() {
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                val response = com.example.data.api.RetrofitClient.getTransactionApiService(getApplication()).getTransactions()
+                if (response.isSuccessful && response.body()?.data != null) {
+                    val flatList = response.body()!!.data!!
+                    val grouped = flatList.groupBy { it.idTransaksi }
+                    val newTransactions = grouped.map { (idTx, items) ->
+                        val firstItem = items.first()
+                        val sdf = java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'", java.util.Locale.getDefault())
+                        sdf.timeZone = java.util.TimeZone.getTimeZone("UTC")
+                        val timeMs = try { sdf.parse(firstItem.waktu)?.time ?: System.currentTimeMillis() } catch(e: Exception) { System.currentTimeMillis() }
+                        
+                        val transactionItems = items.map {
+                            com.example.data.TransactionItem(
+                                itemId = it.id,
+                                namaBarang = it.namaItem,
+                                qty = it.jumlah,
+                                harga = it.harga.toLong(),
+                                subTotal = (it.jumlah * it.harga).toLong(),
+                                servedQty = 0
+                            )
+                        }
+                        val total = transactionItems.sumOf { it.subTotal }
+                        com.example.data.Transaction(
+                            kodeTransaksi = idTx,
+                            tanggalTransaksi = timeMs,
+                            customerName = "", 
+                            status = firstItem.orderStatus ?: "COMPLETED",
+                            items = transactionItems,
+                            totalHarga = total,
+                            diskonPersen = 0.0,
+                            diskonNominal = 0L,
+                            totalSetelahDiskon = total
+                        )
+                    }
+
+                    val localTransactions = storageHelper.getNestedTransactions().toMutableList()
+                    var hasChanges = false
+
+                    for (newTx in newTransactions) {
+                        val index = localTransactions.indexOfFirst { it.kodeTransaksi == newTx.kodeTransaksi }
+                        if (index != -1) {
+                            val localTx = localTransactions[index]
+                            var txChanged = false
+                            if (localTx.status != newTx.status) {
+                                txChanged = true
+                            }
+                            val mergedItems = newTx.items.map { newIt ->
+                                val localIt = localTx.items.find { it.itemId == newIt.itemId }
+                                newIt.copy(servedQty = localIt?.servedQty ?: 0)
+                            }
+                            if (localTx.items != mergedItems || localTx.totalHarga != newTx.totalHarga) {
+                                txChanged = true
+                            }
+                            if (txChanged) {
+                                localTransactions[index] = localTx.copy(
+                                    status = newTx.status,
+                                    items = mergedItems,
+                                    totalHarga = newTx.totalHarga,
+                                    totalSetelahDiskon = newTx.totalSetelahDiskon
+                                )
+                                hasChanges = true
+                            }
+                        } else {
+                            localTransactions.add(newTx)
+                            hasChanges = true
+                        }
+                    }
+
+                    if (hasChanges) {
+                        storageHelper.saveNestedTransactions(localTransactions)
+                        _activeOrders.value = localTransactions
+                    } else if (_activeOrders.value != localTransactions) {
+                        _activeOrders.value = localTransactions
+                    }
+                }
+            } catch (e: Exception) {}
+        }
+    }
+
+    fun startPollingActiveOrders() {
+        viewModelScope.launch(Dispatchers.IO) {
+            while(true) {
+                fetchActiveOrders()
+                kotlinx.coroutines.delay(10000)
+            }
+        }
+    }
+
+    fun addItemToActiveOrder(
+        kodeTransaksi: String, 
+        newItem: TransactionItem, 
+        onSuccess: () -> Unit, 
+        onError: (String) -> Unit
+    ) {
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                val request = com.example.data.AddTransactionItemRequest(
+                    product_id = newItem.itemId,
+                    quantity = newItem.qty,
+                    unit_price = newItem.harga.toDouble(),
+                    subtotal = newItem.subTotal.toDouble()
+                )
+                val response = com.example.data.api.RetrofitClient.getTransactionApiService(getApplication())
+                    .addTransactionItem(kodeTransaksi, request)
+                    
+                if (response.isSuccessful) {
+                    // Update lokal jika perlu atau panggil fetchActiveOrders
+                    fetchActiveOrders()
+                    launch(Dispatchers.Main) {
+                        onSuccess()
+                    }
+                } else {
+                    val errorBodyString = response.errorBody()?.string()
+                    var errorMessage = "Gagal menambah item: ${response.message()}"
+                    
+                    try {
+                        if (errorBodyString != null) {
+                            val jsonObject = org.json.JSONObject(errorBodyString)
+                            if (jsonObject.has("error")) {
+                                val errors = jsonObject.getJSONArray("error")
+                                if (errors.length() > 0) {
+                                    errorMessage = errors.getString(0)
+                                }
+                            } else if (jsonObject.has("message")) {
+                                errorMessage = jsonObject.getString("message")
+                            }
+                        }
+                    } catch (e: Exception) {
+                        // Abaikan jika bukan JSON
+                    }
+                    
+                    launch(Dispatchers.Main) {
+                        onError(errorMessage)
+                    }
+                }
+            } catch (e: Exception) {
+                launch(Dispatchers.Main) {
+                    onError("Terjadi kesalahan koneksi: ${e.message}")
+                }
+            }
+        }
+    }
+
     private val _cartItems = mutableStateListOf<TransactionItem>()
     val cartItems: List<TransactionItem> = _cartItems
 

@@ -308,8 +308,10 @@ fun DashboardScreen(
         try {
             val response = com.example.data.api.RetrofitClient.getProductApiService(mContext).getProducts()
             if (response.isSuccessful && response.body()?.data != null) {
+                val validMenus = response.body()!!.data!!
                 menuList.clear()
-                menuList.addAll(response.body()!!.data!!)
+                menuList.addAll(validMenus)
+                storageHelper.saveMenuList(validMenus) // Explicitly menimpa memori lokal
             }
         } catch (e: Exception) {}
         
@@ -691,17 +693,19 @@ fun BerandaTabContent(
         Spacer(modifier = Modifier.height(32.dp))
         
         // Active Orders (Open Bill) directly in Beranda
-        Text(
-            text = "ORDERAN AKTIF (OPEN BILL)",
-            style = MaterialTheme.typography.titleSmall,
-            fontWeight = FontWeight.Bold
-        )
-        Spacer(modifier = Modifier.height(12.dp))
-        ActiveOrdersTabContent(
-            menuList = menuList,
-            modifier = Modifier.fillMaxWidth().heightIn(min = 200.dp, max = 500.dp) // Wrap in a constrained box to fit inside scrollview
-        )
-        Spacer(modifier = Modifier.height(48.dp))
+        if (role == "Admin Toko") {
+            Text(
+                text = "ORDERAN AKTIF (OPEN BILL)",
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.Bold
+            )
+            Spacer(modifier = Modifier.height(12.dp))
+            ActiveOrdersTabContent(
+                menuList = menuList,
+                modifier = Modifier.fillMaxWidth().heightIn(min = 200.dp, max = 500.dp) // Wrap in a constrained box to fit inside scrollview
+            )
+            Spacer(modifier = Modifier.height(48.dp))
+        }
     }
 }
 
@@ -2051,15 +2055,15 @@ fun BiayaTabContent(
             ) {
                 Column(modifier = Modifier.padding(16.dp)) {
                     Row(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp), horizontalArrangement = Arrangement.SpaceBetween) {
-                        Text(text = "A. Biaya Bahan Baku", style = MaterialTheme.typography.bodyMedium)
+                        Text(text = "A. Biaya Bahan Baku", style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f).padding(end = 8.dp))
                         Text(text = formatRupiah(totalA), style = MaterialTheme.typography.bodyMedium)
                     }
                     Row(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp), horizontalArrangement = Arrangement.SpaceBetween) {
-                        Text(text = "B. Biaya Operasional", style = MaterialTheme.typography.bodyMedium)
+                        Text(text = "B. Biaya Operasional", style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f).padding(end = 8.dp))
                         Text(text = formatRupiah(totalB), style = MaterialTheme.typography.bodyMedium)
                     }
                     Row(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp), horizontalArrangement = Arrangement.SpaceBetween) {
-                        Text(text = "C. Biaya dll", style = MaterialTheme.typography.bodyMedium)
+                        Text(text = "C. Biaya dll", style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f).padding(end = 8.dp))
                         Text(text = formatRupiah(totalC), style = MaterialTheme.typography.bodyMedium)
                     }
                     Divider(modifier = Modifier.padding(vertical = 8.dp))
@@ -2088,7 +2092,7 @@ fun BiayaTabContent(
                     } else {
                         bahanBakuList.forEachIndexed { index, b ->
                             Row(modifier = Modifier.fillMaxWidth().clickable { selectedItemForDetail = b }.padding(vertical = 4.dp), horizontalArrangement = Arrangement.SpaceBetween) {
-                                Text(text = "${index + 1}. ${b.keterangan}", style = MaterialTheme.typography.bodyMedium)
+                                Text(text = "${index + 1}. ${b.keterangan}", style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f).padding(end = 8.dp))
                                 Text(text = formatRupiah(b.jumlah), style = MaterialTheme.typography.bodyMedium)
                             }
                         }
@@ -2119,7 +2123,7 @@ fun BiayaTabContent(
                     } else {
                         opsList.forEachIndexed { index, b ->
                             Row(modifier = Modifier.fillMaxWidth().clickable { selectedItemForDetail = b }.padding(vertical = 4.dp), horizontalArrangement = Arrangement.SpaceBetween) {
-                                Text(text = "${index + 1}. ${b.keterangan}", style = MaterialTheme.typography.bodyMedium)
+                                Text(text = "${index + 1}. ${b.keterangan}", style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f).padding(end = 8.dp))
                                 Text(text = formatRupiah(b.jumlah), style = MaterialTheme.typography.bodyMedium)
                             }
                         }
@@ -2150,7 +2154,7 @@ fun BiayaTabContent(
                     } else {
                         dllList.forEachIndexed { index, b ->
                             Row(modifier = Modifier.fillMaxWidth().clickable { selectedItemForDetail = b }.padding(vertical = 4.dp), horizontalArrangement = Arrangement.SpaceBetween) {
-                                Text(text = "${index + 1}. ${b.keterangan}", style = MaterialTheme.typography.bodyMedium)
+                                Text(text = "${index + 1}. ${b.keterangan}", style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f).padding(end = 8.dp))
                                 Text(text = formatRupiah(b.jumlah), style = MaterialTheme.typography.bodyMedium)
                             }
                         }
@@ -3440,24 +3444,48 @@ fun BarangTabContent(
                     }
                 },
                 confirmButton = {
-                    Button(onClick = {
-                        val h = hargaMenu.toDoubleOrNull() ?: 0.0
-                        if (namaMenu.isNotBlank() && h > 0) {
-                            val newKategori = if (kategoriMenu.isNotBlank()) kategoriMenu else "Lainnya"
-                            val newMenuItem = MenuItem(java.util.UUID.randomUUID().toString(), namaMenu, h, 100, newKategori)
-                            coroutineScope.launch {
-                                try {
-                                    com.example.data.api.RetrofitClient.getProductApiService(mContext).addProduct(newMenuItem)
-                                } catch (e: Exception) {}
+                    var isAddingMenu by remember { mutableStateOf(false) }
+                    Button(
+                        onClick = {
+                            val h = hargaMenu.toDoubleOrNull() ?: 0.0
+                            if (namaMenu.isNotBlank() && h > 0) {
+                                isAddingMenu = true
+                                val newKategori = if (kategoriMenu.isNotBlank()) kategoriMenu else "Lainnya"
+                                val newMenuItem = MenuItem(java.util.UUID.randomUUID().toString(), namaMenu, h, 100, newKategori)
+                                coroutineScope.launch {
+                                    try {
+                                        val response = com.example.data.api.RetrofitClient.getProductApiService(mContext).addProduct(newMenuItem)
+                                        if (response.isSuccessful) {
+                                            // Refetch to get actual IDs from database
+                                            val fetchResponse = com.example.data.api.RetrofitClient.getProductApiService(mContext).getProducts()
+                                            if (fetchResponse.isSuccessful && fetchResponse.body()?.data != null) {
+                                                menuList.clear()
+                                                menuList.addAll(fetchResponse.body()!!.data!!)
+                                                // Optional: salesViewModel.loadItems() if available
+                                            } else {
+                                                // Fallback if fetch fails but add succeeded
+                                                menuList.add(newMenuItem)
+                                            }
+                                            showAddMenuForm = false
+                                            snackbarHostState.showSnackbar("Barang berhasil ditambahkan")
+                                        } else {
+                                            snackbarHostState.showSnackbar("Gagal menambah barang: ${response.message()}")
+                                        }
+                                    } catch (e: Exception) {
+                                        snackbarHostState.showSnackbar("Terjadi kesalahan koneksi")
+                                    } finally {
+                                        isAddingMenu = false
+                                    }
+                                }
                             }
-                            menuList.add(newMenuItem)
-                            showAddMenuForm = false
-                            coroutineScope.launch {
-                                snackbarHostState.showSnackbar("Barang berhasil ditambahkan")
-                            }
+                        },
+                        enabled = !isAddingMenu
+                    ) {
+                        if (isAddingMenu) {
+                            CircularProgressIndicator(modifier = Modifier.size(24.dp), color = Color.White, strokeWidth = 2.dp)
+                        } else {
+                            Text("Simpan")
                         }
-                    }) {
-                        Text("Simpan")
                     }
                 },
                 dismissButton = {

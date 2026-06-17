@@ -1,5 +1,6 @@
 package com.example.ui.screens
 
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -34,16 +35,22 @@ fun ActiveOrdersTabContent(
 ) {
     val context = LocalContext.current
     val storageHelper = remember { LocalStorageHelper(context) }
-    var nestedTransactions by remember { mutableStateOf(storageHelper.getNestedTransactions()) }
+    val salesViewModel: SalesViewModel = viewModel()
+    
+    val nestedTransactions by salesViewModel.activeOrders.collectAsState()
+
+    LaunchedEffect(Unit) {
+        salesViewModel.loadActiveOrders()
+        salesViewModel.startPollingActiveOrders()
+    }
     
     // Only show PENDING and READY orders
     val activeOrders = nestedTransactions.filter { it.status == "PENDING" || it.status == "READY" }.sortedByDescending { it.tanggalTransaksi }
-
-    val salesViewModel: SalesViewModel = viewModel()
     
     var showReceiptDialog by remember { mutableStateOf<Transaction?>(null) }
     var showKitchenReceiptDialog by remember { mutableStateOf<Transaction?>(null) }
     var showAddItemDialog by remember { mutableStateOf<Transaction?>(null) }
+    var itemToEdit by remember { mutableStateOf<Pair<Transaction, com.example.data.TransactionItem>?>(null) }
 
     Column(
         modifier = modifier
@@ -51,11 +58,24 @@ fun ActiveOrdersTabContent(
             .padding(16.dp)
     ) {
         Spacer(modifier = Modifier.height(28.dp))
-        Text(
-            text = "Daftar Pesanan Aktif",
-            style = MaterialTheme.typography.titleLarge,
-            fontWeight = FontWeight.Bold
-        )
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = "Daftar Pesanan Aktif (${activeOrders.size})",
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.Bold
+            )
+            IconButton(onClick = { salesViewModel.fetchActiveOrders() }) {
+                Icon(
+                    imageVector = AppIcons.Refresh,
+                    contentDescription = "Refresh",
+                    tint = MaterialTheme.colorScheme.primary
+                )
+            }
+        }
         Spacer(modifier = Modifier.height(16.dp))
 
         if (activeOrders.isEmpty()) {
@@ -69,17 +89,17 @@ fun ActiveOrdersTabContent(
                         order = order,
                         onMarkReady = {
                             storageHelper.updateTransactionStatus(order.kodeTransaksi, "READY")
-                            nestedTransactions = storageHelper.getNestedTransactions()
+                            salesViewModel.syncLocalActiveOrders()
                         },
                         onProcessPayment = {
                             // Untuk simplifikasi: saat dibayar, status jadi COMPLETED, cetak struk kasir
                             storageHelper.updateTransactionStatus(order.kodeTransaksi, "COMPLETED")
-                            nestedTransactions = storageHelper.getNestedTransactions()
+                            salesViewModel.syncLocalActiveOrders()
                             showReceiptDialog = order
                         },
                         onUpdateItemServedQty = { itemId, newQty ->
                             storageHelper.updateItemServedQty(order.kodeTransaksi, itemId, newQty)
-                            nestedTransactions = storageHelper.getNestedTransactions()
+                            salesViewModel.syncLocalActiveOrders()
                             
                             // Check if all items are fully served
                             val updatedTx = storageHelper.getNestedTransactions().find { it.kodeTransaksi == order.kodeTransaksi }
@@ -87,7 +107,10 @@ fun ActiveOrdersTabContent(
                                 val allServed = updatedTx.items.all { it.servedQty >= it.qty }
                                 if (allServed && updatedTx.status == "PENDING") {
                                     storageHelper.updateTransactionStatus(updatedTx.kodeTransaksi, "READY")
-                                    nestedTransactions = storageHelper.getNestedTransactions()
+                                    salesViewModel.syncLocalActiveOrders()
+                                } else if (!allServed && updatedTx.status == "READY") {
+                                    storageHelper.updateTransactionStatus(updatedTx.kodeTransaksi, "PENDING")
+                                    salesViewModel.syncLocalActiveOrders()
                                 }
                             }
                         },
@@ -96,11 +119,71 @@ fun ActiveOrdersTabContent(
                         },
                         onAddItemsClick = {
                             showAddItemDialog = order
+                        },
+                        onEditItemClick = { item ->
+                            itemToEdit = Pair(order, item)
                         }
                     )
                 }
             }
         }
+    }
+
+    if (itemToEdit != null) {
+        val transaction = itemToEdit!!.first
+        val item = itemToEdit!!.second
+        var editQuantity by remember { mutableStateOf(item.qty) }
+
+        AlertDialog(
+            onDismissRequest = { itemToEdit = null },
+            title = { Text("Edit Item Pesanan") },
+            text = {
+                Column {
+                    Text("Item: ${item.namaBarang}")
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.Center,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        IconButton(onClick = { if (editQuantity > 1) editQuantity-- }) {
+                            Icon(AppIcons.Remove, contentDescription = "Kurangi")
+                        }
+                        Text(text = editQuantity.toString(), fontSize = 18.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(horizontal = 16.dp))
+                        IconButton(onClick = { editQuantity++ }) {
+                            Icon(AppIcons.Add, contentDescription = "Tambah")
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                Button(onClick = {
+                    storageHelper.updateItemQuantity(transaction.kodeTransaksi, item.itemId, editQuantity)
+                    salesViewModel.syncLocalActiveOrders()
+                    itemToEdit = null
+                }) {
+                    Text("Simpan")
+                }
+            },
+            dismissButton = {
+                Row {
+                    TextButton(
+                        onClick = {
+                            storageHelper.removeItemFromTransaction(transaction.kodeTransaksi, item.itemId)
+                            salesViewModel.syncLocalActiveOrders()
+                            itemToEdit = null
+                        },
+                        colors = ButtonDefaults.textButtonColors(contentColor = Color.Red)
+                    ) {
+                        Text("Hapus Item")
+                    }
+                    Spacer(modifier = Modifier.width(8.dp))
+                    TextButton(onClick = { itemToEdit = null }) {
+                        Text("Batal")
+                    }
+                }
+            }
+        )
     }
 
     if (showAddItemDialog != null) {
@@ -111,9 +194,10 @@ fun ActiveOrdersTabContent(
         }
         var selectedItem by remember(searchQuery) { mutableStateOf<MenuItem?>(filteredMenu.firstOrNull()) }
         var quantity by remember { mutableStateOf(1) }
+        var isLoading by remember { mutableStateOf(false) }
 
         AlertDialog(
-            onDismissRequest = { showAddItemDialog = null },
+            onDismissRequest = { if (!isLoading) showAddItemDialog = null },
             title = { Text("Tambah Item Pesanan") },
             text = {
                 Column {
@@ -125,7 +209,8 @@ fun ActiveOrdersTabContent(
                         onValueChange = { searchQuery = it },
                         label = { Text("Cari menu...") },
                         modifier = Modifier.fillMaxWidth(),
-                        singleLine = true
+                        singleLine = true,
+                        enabled = !isLoading
                     )
                     Spacer(modifier = Modifier.height(8.dp))
                     
@@ -136,7 +221,7 @@ fun ActiveOrdersTabContent(
                             Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .clickable { selectedItem = menu }
+                                    .clickable(enabled = !isLoading) { selectedItem = menu }
                                     .background(if (isSelected) MaterialTheme.colorScheme.primaryContainer else Color.Transparent)
                                     .padding(8.dp),
                                 horizontalArrangement = Arrangement.SpaceBetween
@@ -153,38 +238,58 @@ fun ActiveOrdersTabContent(
                         horizontalArrangement = Arrangement.Center,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        IconButton(onClick = { if (quantity > 1) quantity-- }) {
+                        IconButton(onClick = { if (quantity > 1) quantity-- }, enabled = !isLoading) {
                             Icon(AppIcons.Remove, contentDescription = "Kurangi")
                         }
                         Text(text = quantity.toString(), fontSize = 18.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(horizontal = 16.dp))
-                        IconButton(onClick = { quantity++ }) {
+                        IconButton(onClick = { quantity++ }, enabled = !isLoading) {
                             Icon(AppIcons.Add, contentDescription = "Tambah")
                         }
                     }
                 }
             },
             confirmButton = {
-                Button(onClick = {
-                    selectedItem?.let { menu ->
-                        val newItem = com.example.data.TransactionItem(
-                            itemId = menu.id,
-                            namaBarang = menu.nama,
-                            qty = quantity,
-                            harga = menu.harga.toLong(),
-                            subTotal = quantity * menu.harga.toLong(),
-                            servedQty = 0
-                        )
-                        storageHelper.addItemsToTransaction(transaction.kodeTransaksi, newItem)
-                        storageHelper.updateTransactionStatus(transaction.kodeTransaksi, "PENDING")
-                        nestedTransactions = storageHelper.getNestedTransactions()
+                Button(
+                    onClick = {
+                        selectedItem?.let { menu ->
+                            isLoading = true
+                            val newItem = com.example.data.TransactionItem(
+                                itemId = menu.id,
+                                namaBarang = menu.nama,
+                                qty = quantity,
+                                harga = menu.harga.toLong(),
+                                subTotal = quantity * menu.harga.toLong(),
+                                servedQty = 0
+                            )
+                            
+                            salesViewModel.addItemToActiveOrder(
+                                kodeTransaksi = transaction.kodeTransaksi,
+                                newItem = newItem,
+                                onSuccess = {
+                                    isLoading = false
+                                    android.widget.Toast.makeText(context, "Item berhasil ditambahkan", android.widget.Toast.LENGTH_SHORT).show()
+                                    showAddItemDialog = null
+                                },
+                                onError = { errorMsg ->
+                                    isLoading = false
+                                    android.widget.Toast.makeText(context, errorMsg, android.widget.Toast.LENGTH_LONG).show()
+                                }
+                            )
+                        } ?: run {
+                            android.widget.Toast.makeText(context, "Pilih menu terlebih dahulu", android.widget.Toast.LENGTH_SHORT).show()
+                        }
+                    },
+                    enabled = !isLoading
+                ) {
+                    if (isLoading) {
+                        CircularProgressIndicator(modifier = Modifier.size(24.dp), color = Color.White, strokeWidth = 2.dp)
+                    } else {
+                        Text("Simpan Tambahan")
                     }
-                    showAddItemDialog = null
-                }) {
-                    Text("Simpan Tambahan")
                 }
             },
             dismissButton = {
-                TextButton(onClick = { showAddItemDialog = null }) {
+                TextButton(onClick = { showAddItemDialog = null }, enabled = !isLoading) {
                     Text("Batal")
                 }
             }
@@ -291,7 +396,8 @@ fun OrderCard(
     onProcessPayment: () -> Unit,
     onUpdateItemServedQty: (String, Int) -> Unit,
     onPrintDapur: () -> Unit,
-    onAddItemsClick: () -> Unit
+    onAddItemsClick: () -> Unit,
+    onEditItemClick: (com.example.data.TransactionItem) -> Unit
 ) {
     val sdf = SimpleDateFormat("dd/MM/yyyy HH:mm", Locale.getDefault())
     val timeStr = sdf.format(Date(order.tanggalTransaksi))
@@ -304,9 +410,14 @@ fun OrderCard(
         colors = CardDefaults.cardColors(containerColor = containerColor),
         elevation = CardDefaults.cardElevation(2.dp)
     ) {
-        Column(modifier = Modifier.padding(16.dp)) {
+        var isExpanded by remember { mutableStateOf(false) }
+        
+        Column {
             Row(
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { isExpanded = !isExpanded }
+                    .padding(16.dp),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.Top
             ) {
@@ -320,65 +431,99 @@ fun OrderCard(
                     Text(text = bottomText, style = MaterialTheme.typography.bodySmall, color = Color.Gray)
                 }
                 
-                Surface(
-                    color = if (isReady) SuccessColor else MaterialTheme.colorScheme.primary,
-                    shape = RoundedCornerShape(8.dp)
-                ) {
-                    Text(
-                        text = if (isReady) "SIAP" else "DAPUR",
-                        color = Color.White,
-                        fontSize = 10.sp,
-                        fontWeight = FontWeight.Bold,
-                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Surface(
+                        color = if (isReady) SuccessColor else MaterialTheme.colorScheme.primary,
+                        shape = RoundedCornerShape(8.dp)
+                    ) {
+                        Text(
+                            text = if (isReady) "SIAP" else "DAPUR",
+                            color = Color.White,
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Bold,
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                        )
+                    }
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Icon(
+                        imageVector = AppIcons.ArrowDropDown,
+                        contentDescription = "Expand",
+                        tint = Color.Gray
                     )
                 }
             }
             
-            Spacer(modifier = Modifier.height(12.dp))
-            Divider()
-            Spacer(modifier = Modifier.height(8.dp))
+            AnimatedVisibility(visible = isExpanded) {
+                Column(modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 16.dp)) {
+                    Divider()
+                    Spacer(modifier = Modifier.height(8.dp))
             
             order.items.forEach { item ->
                 Row(
                     modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
                     horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
+                    verticalAlignment = Alignment.Top // Mengikuti flex items-start
                 ) {
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text("${item.qty}x ${item.namaBarang}")
-                    }
-                    if (!isReady) {
-                        Surface(
-                            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
-                            shape = RoundedCornerShape(16.dp)
+                    // Container Nama Menu + Tombol Edit
+                    Row(
+                        modifier = Modifier
+                            .weight(1f) // flex-1 min-w-0
+                            .padding(end = 12.dp), // mr-3
+                        verticalAlignment = Alignment.Top // items-start
+                    ) {
+                        Text(
+                            text = "${item.qty}x ${item.namaBarang}",
+                            modifier = Modifier.weight(1f) // flex-1, break-words
+                        )
+                        IconButton(
+                            onClick = { onEditItemClick(item) },
+                            modifier = Modifier
+                                .padding(start = 8.dp) // ml-2
+                                .size(24.dp) // shrink-0
                         ) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                IconButton(
-                                    onClick = { if (item.servedQty > 0) onUpdateItemServedQty(item.itemId, item.servedQty - 1) },
-                                    modifier = Modifier.size(32.dp)
-                                ) {
-                                    Icon(imageVector = AppIcons.Remove, contentDescription = "Kurang", modifier = Modifier.size(16.dp))
-                                }
-                                Text(
-                                    text = "${item.servedQty} / ${item.qty}",
-                                    modifier = Modifier.padding(horizontal = 4.dp),
-                                    fontSize = 12.sp,
-                                    fontWeight = FontWeight.Medium
+                            Icon(
+                                imageVector = AppIcons.Edit,
+                                contentDescription = "Edit Item",
+                                modifier = Modifier.size(16.dp),
+                                tint = Color.Gray
+                            )
+                        }
+                    }
+                    Surface(
+                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                        shape = RoundedCornerShape(16.dp)
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            IconButton(
+                                onClick = { if (item.servedQty > 0) onUpdateItemServedQty(item.itemId, item.servedQty - 1) },
+                                modifier = Modifier.size(32.dp)
+                            ) {
+                                Icon(
+                                    imageVector = AppIcons.Remove, 
+                                    contentDescription = "Kurang", 
+                                    modifier = Modifier.size(16.dp),
+                                    tint = if (item.servedQty > 0) MaterialTheme.colorScheme.onSurface else Color.LightGray
                                 )
-                                IconButton(
-                                    onClick = { if (item.servedQty < item.qty) onUpdateItemServedQty(item.itemId, item.servedQty + 1) },
-                                    modifier = Modifier.size(32.dp)
-                                ) {
-                                    Icon(imageVector = AppIcons.Add, contentDescription = "Tambah", modifier = Modifier.size(16.dp))
-                                }
+                            }
+                            Text(
+                                text = "${item.servedQty} / ${item.qty}",
+                                modifier = Modifier.padding(horizontal = 4.dp),
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Medium,
+                                color = if (item.servedQty == item.qty) SuccessColor else MaterialTheme.colorScheme.onSurface
+                            )
+                            IconButton(
+                                onClick = { if (item.servedQty < item.qty) onUpdateItemServedQty(item.itemId, item.servedQty + 1) },
+                                modifier = Modifier.size(32.dp)
+                            ) {
+                                Icon(
+                                    imageVector = AppIcons.Add, 
+                                    contentDescription = "Tambah", 
+                                    modifier = Modifier.size(16.dp),
+                                    tint = if (item.servedQty < item.qty) MaterialTheme.colorScheme.onSurface else Color.LightGray
+                                )
                             }
                         }
-                    } else {
-                        Text(
-                            text = "${item.qty} / ${item.qty} Disajikan",
-                            fontSize = 12.sp,
-                            color = SuccessColor
-                        )
                     }
                 }
             }
@@ -419,5 +564,7 @@ fun OrderCard(
                 }
             }
         }
+        }
     }
+}
 }

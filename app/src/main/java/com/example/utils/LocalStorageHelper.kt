@@ -357,6 +357,83 @@ class LocalStorageHelper(private val context: Context) {
         }
     }
 
+    fun updateItemQuantity(kodeTransaksi: String, itemId: String, newQty: Int) {
+        val list = getNestedTransactions().toMutableList()
+        val index = list.indexOfFirst { it.kodeTransaksi == kodeTransaksi }
+        if (index != -1) {
+            val transaction = list[index]
+            val currentItems = transaction.items.toMutableList()
+            
+            val itemIndex = currentItems.indexOfFirst { it.itemId == itemId }
+            if (itemIndex != -1) {
+                val item = currentItems[itemIndex]
+                val newSubTotal = newQty * item.harga
+                currentItems[itemIndex] = item.copy(qty = newQty, subTotal = newSubTotal)
+                
+                // Recalculate totals
+                val newTotalHarga = currentItems.sumOf { it.subTotal }
+                val newDiskonNominal = (newTotalHarga * transaction.diskonPersen / 100).toLong()
+                val newTotalSetelahDiskon = newTotalHarga - newDiskonNominal
+                
+                list[index] = transaction.copy(
+                    items = currentItems,
+                    totalHarga = newTotalHarga,
+                    diskonNominal = newDiskonNominal,
+                    totalSetelahDiskon = newTotalSetelahDiskon
+                )
+                saveNestedTransactions(list)
+                
+                // Update flat list
+                val flatList = getTransaksiList().toMutableList()
+                val flatIndex = flatList.indexOfFirst { it.idTransaksi == kodeTransaksi && it.id == itemId }
+                if (flatIndex != -1) {
+                    flatList[flatIndex] = flatList[flatIndex].copy(jumlah = newQty)
+                    saveTransaksiList(flatList)
+                }
+            }
+        }
+    }
+
+    fun removeItemFromTransaction(kodeTransaksi: String, itemId: String) {
+        val list = getNestedTransactions().toMutableList()
+        val index = list.indexOfFirst { it.kodeTransaksi == kodeTransaksi }
+        if (index != -1) {
+            val transaction = list[index]
+            val currentItems = transaction.items.toMutableList()
+            
+            val itemIndex = currentItems.indexOfFirst { it.itemId == itemId }
+            if (itemIndex != -1) {
+                currentItems.removeAt(itemIndex)
+                
+                if (currentItems.isEmpty()) {
+                    // Jika pesanan jadi kosong, bisa ubah status jadi CANCELLED atau hapus
+                    list[index] = transaction.copy(status = "CANCELLED", items = emptyList(), totalHarga = 0, totalSetelahDiskon = 0)
+                } else {
+                    // Recalculate totals
+                    val newTotalHarga = currentItems.sumOf { it.subTotal }
+                    val newDiskonNominal = (newTotalHarga * transaction.diskonPersen / 100).toLong()
+                    val newTotalSetelahDiskon = newTotalHarga - newDiskonNominal
+                    
+                    list[index] = transaction.copy(
+                        items = currentItems,
+                        totalHarga = newTotalHarga,
+                        diskonNominal = newDiskonNominal,
+                        totalSetelahDiskon = newTotalSetelahDiskon
+                    )
+                }
+                saveNestedTransactions(list)
+                
+                // Update flat list
+                val flatList = getTransaksiList().toMutableList()
+                val flatIndex = flatList.indexOfFirst { it.idTransaksi == kodeTransaksi && it.id == itemId }
+                if (flatIndex != -1) {
+                    flatList.removeAt(flatIndex)
+                    saveTransaksiList(flatList)
+                }
+            }
+        }
+    }
+
     private fun getDefaultMenuList(): List<MenuItem> {
         return emptyList()
     }
