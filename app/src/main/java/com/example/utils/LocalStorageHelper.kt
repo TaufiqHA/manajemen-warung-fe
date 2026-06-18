@@ -201,9 +201,11 @@ class LocalStorageHelper(private val context: Context) {
         // Update flat list for dashboard filtering
         val flatList = getTransaksiList().toMutableList()
         var flatUpdated = false
+        var currentPaymentMethod: String? = null
         for (i in flatList.indices) {
             if (flatList[i].idTransaksi == kodeTransaksi) {
                 flatList[i] = flatList[i].copy(orderStatus = newStatus)
+                currentPaymentMethod = flatList[i].metodePembayaran
                 flatUpdated = true
             }
         }
@@ -215,7 +217,10 @@ class LocalStorageHelper(private val context: Context) {
             try {
                 com.example.data.api.RetrofitClient.getTransactionApiService(context).updateTransactionStatus(
                     transactionId = kodeTransaksi,
-                    request = com.example.data.UpdateStatusRequest(status = newStatus)
+                    request = com.example.data.UpdateStatusRequest(
+                        status = newStatus,
+                        payment_method = currentPaymentMethod
+                    )
                 )
                 removeUnsyncedStatusUpdate(kodeTransaksi)
             } catch (e: Exception) {
@@ -223,6 +228,18 @@ class LocalStorageHelper(private val context: Context) {
                 android.util.Log.e("LocalStorageHelper", "Failed to sync status update to server, queued for offline", e)
             }
         }
+    }
+
+    fun updateTransactionPaymentMethod(kodeTransaksi: String, newPaymentMethod: String) {
+        val flatList = getTransaksiList().toMutableList()
+        var flatUpdated = false
+        for (i in flatList.indices) {
+            if (flatList[i].idTransaksi == kodeTransaksi) {
+                flatList[i] = flatList[i].copy(metodePembayaran = newPaymentMethod, catatan = "Via: $newPaymentMethod")
+                flatUpdated = true
+            }
+        }
+        if (flatUpdated) saveTransaksiList(flatList)
     }
 
     fun updateItemServedQty(kodeTransaksi: String, itemId: String, newServedQty: Int) {
@@ -353,26 +370,49 @@ class LocalStorageHelper(private val context: Context) {
         @kotlin.OptIn(kotlinx.coroutines.DelicateCoroutinesApi::class)
         kotlinx.coroutines.GlobalScope.launch(kotlinx.coroutines.Dispatchers.IO) {
             val apiItems = newFlatItems.map { flatIt ->
+                val isUnknownProduct = getMenuList().none { it.id == flatIt.id }
+                val rawProductId = if (isUnknownProduct) null else flatIt.id.removePrefix("PRD-").toIntOrNull()?.toString()
                 com.example.data.TransactionItemRequest(
                     namaItem = flatIt.namaItem,
                     jumlah = flatIt.jumlah,
                     harga = flatIt.harga,
                     catatan = flatIt.catatan,
-                    servedQty = transaction.items.find { it.itemId == flatIt.id }?.servedQty ?: 0
+                    servedQty = transaction.items.find { it.itemId == flatIt.id }?.servedQty ?: 0,
+                    product_id = rawProductId,
+                    quantity = flatIt.jumlah,
+                    unit_price = flatIt.harga,
+                    subtotal = flatIt.harga * flatIt.jumlah
                 )
             }
+            val pm = paymentMethod.uppercase()
+            val validPaymentMethod = if (pm == "BELUM LUNAS") null else pm
             val request = com.example.data.TransactionRequest(
                 idTransaksi = transaction.kodeTransaksi,
                 waktu = timeStr,
                 dicatatOleh = "Admin Toko",
-                payment_method = paymentMethod.uppercase(),
+                payment_method = validPaymentMethod,
                 customerName = transaction.customerName,
                 orderStatus = transaction.status,
+                status = transaction.status,
                 items = apiItems
             )
             
             try {
-                com.example.data.api.RetrofitClient.getTransactionApiService(context).createTransaction(request)
+                val response = com.example.data.api.RetrofitClient.getTransactionApiService(context).createTransaction(request)
+                if (!response.isSuccessful) {
+                    addUnsyncedTransaction(request)
+                    val err = response.errorBody()?.string() ?: "Unknown error"
+                    android.util.Log.e("LocalStorageHelper", "API CreateTx Error: $err")
+                    // Tampilkan error ke layar agar user bisa melihatnya
+                    android.os.Handler(android.os.Looper.getMainLooper()).post {
+                        android.widget.Toast.makeText(context, "Gagal upload: $err", android.widget.Toast.LENGTH_LONG).show()
+                    }
+                    // Dump error to file for debugging
+                    try {
+                        val file = java.io.File(context.filesDir, "api_error.txt")
+                        file.writeText("Payload: $request\nError: $err")
+                    } catch (e: Exception) {}
+                }
             } catch (e: java.lang.Exception) {
                 // Jika gagal (misal tidak ada koneksi), simpan ke antrean lokal
                 addUnsyncedTransaction(request)
@@ -399,11 +439,16 @@ class LocalStorageHelper(private val context: Context) {
                 }
             }
             
+            val flatList = getTransaksiList()
             for (statusUpdate in unsyncedStatus) {
                 try {
+                    val currentPaymentMethod = flatList.find { it.idTransaksi == statusUpdate.transactionId }?.metodePembayaran
                     apiService.updateTransactionStatus(
                         transactionId = statusUpdate.transactionId,
-                        request = com.example.data.UpdateStatusRequest(status = statusUpdate.status)
+                        request = com.example.data.UpdateStatusRequest(
+                            status = statusUpdate.status,
+                            payment_method = currentPaymentMethod
+                        )
                     )
                     removeUnsyncedStatusUpdate(statusUpdate.transactionId)
                 } catch (e: Exception) {

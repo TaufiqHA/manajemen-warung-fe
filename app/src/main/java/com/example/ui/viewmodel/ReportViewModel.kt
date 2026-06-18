@@ -49,7 +49,43 @@ class ReportViewModel(application: Application) : AndroidViewModel(application) 
             try {
                 val tResponse = com.example.data.api.RetrofitClient.getTransactionApiService(getApplication()).getTransactions()
                 if (tResponse.isSuccessful && tResponse.body()?.data != null) {
-                    val apiFlatTrx = tResponse.body()!!.data!!
+                    val apiFlatTrx = tResponse.body()!!.data!!.toMutableList()
+                    val localFlatList = storageHelper.getTransaksiList()
+                    val unsyncedUpdates = storageHelper.getUnsyncedStatusUpdates().map { it.transactionId }
+                    for (i in apiFlatTrx.indices) {
+                        val flatIt = apiFlatTrx[i]
+                        val lastUpdate = storageHelper.getLastStatusUpdateTime(flatIt.idTransaksi)
+                        val hasUnsynced = unsyncedUpdates.contains(flatIt.idTransaksi)
+                        val localMatch = localFlatList.find { it.idTransaksi == flatIt.idTransaksi }
+                        if (localMatch != null) {
+                            if (localMatch.orderStatus == "COMPLETED" || hasUnsynced || System.currentTimeMillis() - lastUpdate < 15000) {
+                                apiFlatTrx[i] = apiFlatTrx[i].copy(
+                                    orderStatus = localMatch.orderStatus,
+                                    metodePembayaran = localMatch.metodePembayaran,
+                                    catatan = localMatch.catatan
+                                )
+                            }
+                        }
+                    }
+
+                    val serverTxIds = apiFlatTrx.map { it.idTransaksi }.toSet()
+                    val unsyncedTxIdsSet = storageHelper.getUnsyncedTransactions().mapNotNull { it.idTransaksi }.toSet()
+                    val sdfTime = java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'", java.util.Locale.getDefault())
+                    sdfTime.timeZone = java.util.TimeZone.getTimeZone("UTC")
+                    val currentTime = System.currentTimeMillis()
+
+                    val missingLocalFlat = localFlatList.filter { 
+                        if (it.idTransaksi in serverTxIds) return@filter false
+                        if (it.idTransaksi in unsyncedTxIdsSet) return@filter true
+                        try {
+                            val timeMs = sdfTime.parse(it.waktu)?.time ?: 0L
+                            currentTime - timeMs < 300000
+                        } catch (e: Exception) { false }
+                    }
+                    if (missingLocalFlat.isNotEmpty()) {
+                        apiFlatTrx.addAll(missingLocalFlat)
+                    }
+
                     storageHelper.saveTransaksiList(apiFlatTrx)
                     
                     val grouped = apiFlatTrx.groupBy { it.idTransaksi }

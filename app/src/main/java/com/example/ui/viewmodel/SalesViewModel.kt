@@ -55,7 +55,26 @@ class SalesViewModel(application: Application) : AndroidViewModel(application) {
                     // Berhasil konek, otomatis sinkronisasi data offline
                     storageHelper.syncUnsyncedData()
                     
-                    val flatList = response.body()!!.data!!
+                    val flatList = response.body()!!.data!!.toMutableList()
+                    val localFlatList = storageHelper.getTransaksiList()
+                    val unsyncedUpdates = storageHelper.getUnsyncedStatusUpdates().map { it.transactionId }
+
+                    for (i in flatList.indices) {
+                        val flatIt = flatList[i]
+                        val lastUpdate = storageHelper.getLastStatusUpdateTime(flatIt.idTransaksi)
+                        val hasUnsynced = unsyncedUpdates.contains(flatIt.idTransaksi)
+                        
+                        val localMatch = localFlatList.find { it.idTransaksi == flatIt.idTransaksi }
+                        if (localMatch != null) {
+                            if (localMatch.orderStatus == "COMPLETED" || hasUnsynced || System.currentTimeMillis() - lastUpdate < 15000) {
+                                flatList[i] = flatList[i].copy(
+                                    orderStatus = localMatch.orderStatus,
+                                    metodePembayaran = localMatch.metodePembayaran,
+                                    catatan = localMatch.catatan
+                                )
+                            }
+                        }
+                    }
                     val grouped = flatList.groupBy { it.idTransaksi }
                     val newTransactions = grouped.map { (idTx, items) ->
                         val firstItem = items.first()
@@ -99,8 +118,9 @@ class SalesViewModel(application: Application) : AndroidViewModel(application) {
                             var resolvedStatus = newTx.status
                             if (localTx.status != newTx.status) {
                                 val lastUpdate = storageHelper.getLastStatusUpdateTime(localTx.kodeTransaksi)
-                                if (System.currentTimeMillis() - lastUpdate < 15000) {
-                                    // Ignore server status if we just updated it locally within 15 seconds
+                                val hasUnsynced = unsyncedUpdates.contains(localTx.kodeTransaksi)
+                                if (localTx.status == "COMPLETED" || hasUnsynced || System.currentTimeMillis() - lastUpdate < 15000) {
+                                    // Ignore server status if we just updated it locally, it is unsynced, or already COMPLETED locally
                                     resolvedStatus = localTx.status
                                 } else {
                                     txChanged = true
@@ -129,7 +149,30 @@ class SalesViewModel(application: Application) : AndroidViewModel(application) {
                         }
                     }
 
-                    if (hasChanges) {
+                    // --- LOCAL DATA RESCUE ---
+                    val serverTxIds = flatList.map { it.idTransaksi }.toSet()
+                    val unsyncedTxIdsSet = storageHelper.getUnsyncedTransactions().mapNotNull { it.idTransaksi }.toSet()
+                    val sdfTime = java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'", java.util.Locale.getDefault())
+                    sdfTime.timeZone = java.util.TimeZone.getTimeZone("UTC")
+                    val currentTime = System.currentTimeMillis()
+
+                    val missingLocalFlat = localFlatList.filter { 
+                        if (it.idTransaksi in serverTxIds) return@filter false
+                        if (it.idTransaksi in unsyncedTxIdsSet) return@filter true
+                        
+                        try {
+                            val timeMs = sdfTime.parse(it.waktu)?.time ?: 0L
+                            currentTime - timeMs < 300000 // Keep if less than 5 minutes old
+                        } catch (e: Exception) {
+                            false
+                        }
+                    }
+                    if (missingLocalFlat.isNotEmpty()) {
+                        flatList.addAll(missingLocalFlat)
+                    }
+                    // -------------------------
+
+                    if (hasChanges || flatList != localFlatList) {
                         storageHelper.saveTransaksiList(flatList)
                         storageHelper.saveNestedTransactions(localTransactions)
                         _activeOrders.value = localTransactions
@@ -354,7 +397,7 @@ class SalesViewModel(application: Application) : AndroidViewModel(application) {
         return java.text.NumberFormat.getIntegerInstance(Locale("in", "ID")).format(number)
     }
 
-    fun formatReceipt(transaction: Transaction): String {
+    fun formatReceipt(transaction: Transaction, paymentMethod: String? = null): String {
         val lineWidth = 32 // Standar printer thermal 58mm (Font A)
         val sdf = SimpleDateFormat("dd/MM/yyyy HH:mm", Locale.getDefault())
         val dateStr = sdf.format(Date(transaction.tanggalTransaksi))
@@ -379,6 +422,9 @@ class SalesViewModel(application: Application) : AndroidViewModel(application) {
         sb.append("-".repeat(lineWidth) + "\n")
         sb.append("No: ${transaction.kodeTransaksi}\n")
         sb.append("Tgl: $dateStr\n")
+        if (paymentMethod != null) {
+            sb.append("Pembayaran: $paymentMethod\n")
+        }
         sb.append("-".repeat(lineWidth) + "\n")
         
         transaction.items.forEach { item ->

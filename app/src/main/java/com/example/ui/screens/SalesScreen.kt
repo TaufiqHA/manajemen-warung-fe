@@ -64,7 +64,6 @@ fun SalesScreen(
     var isDiscountPercent by remember { mutableStateOf(true) } // true = %, false = Rp
     var discountInput by remember { mutableStateOf("") }
     var discountError by remember { mutableStateOf<String?>(null) }
-    var paymentMethod by remember { mutableStateOf("Cash") }
 
     val subtotal = viewModel.totalHarga
     val discountValue = discountInput.toDoubleOrNull() ?: 0.0
@@ -360,22 +359,6 @@ fun SalesScreen(
             
             Spacer(modifier = Modifier.height(12.dp))
 
-            Row(
-                modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                Text("Pembayaran:", style = MaterialTheme.typography.bodyMedium, color = Color.Gray)
-                listOf("Cash", "QRIS", "Transfer").forEach { method ->
-                    FilterChip(
-                        selected = paymentMethod == method,
-                        onClick = { paymentMethod = method },
-                        label = { Text(method) }
-                    )
-                }
-            }
-            
-            Spacer(modifier = Modifier.height(16.dp))
             
             Button(
                 onClick = {
@@ -385,7 +368,7 @@ fun SalesScreen(
                             diskonPersen = if (isDiscountPercent) discountValue else 0.0,
                             diskonNominal = nominalDiskon,
                             totalSetelahDiskon = totalAkhir,
-                            paymentMethod = paymentMethod
+                            paymentMethod = "BELUM LUNAS"
                         )
                         currentTransaction = transaction
                         receiptText = viewModel.formatKitchenReceipt(transaction)
@@ -412,7 +395,6 @@ fun SalesScreen(
                 viewModel.clearCart()
                 discountInput = ""
                 customerName = ""
-                paymentMethod = "Cash"
             },
             title = { Text("Struk Dapur") },
             text = {

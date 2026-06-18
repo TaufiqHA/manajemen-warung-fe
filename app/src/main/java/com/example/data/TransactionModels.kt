@@ -34,15 +34,21 @@ data class TransactionRequest(
     val payment_method: String? = null,
     val customerName: String? = null,
     val orderStatus: String? = null, // PENDING, READY, COMPLETED
+    val status: String? = null, // Tambahan untuk kompatibilitas
     val items: List<TransactionItemRequest>
 )
 
 data class TransactionItemRequest(
-    val namaItem: String,
-    val jumlah: Int,
-    val harga: Double,
+    val namaItem: String? = null,
+    val jumlah: Int? = null,
+    val harga: Double? = null,
     val catatan: String = "",
-    val servedQty: Int = 0
+    val servedQty: Int = 0,
+    // Tambahan untuk kompatibilitas backend
+    val product_id: String? = null,
+    val quantity: Int? = null,
+    val unit_price: Double? = null,
+    val subtotal: Double? = null
 )
 
 data class CancelTransactionRequest(
@@ -56,7 +62,8 @@ data class UpdateWarungRequest(
 )
 
 data class UpdateStatusRequest(
-    val status: String
+    val status: String,
+    val payment_method: String? = null
 )
 
 data class AddTransactionItemRequest(

@@ -97,6 +97,8 @@ fun ActiveOrdersTabContent(
     var showKitchenReceiptDialog by remember { mutableStateOf<Transaction?>(null) }
     var showAddItemDialog by remember { mutableStateOf<Transaction?>(null) }
     var itemToEdit by remember { mutableStateOf<Pair<Transaction, com.example.data.TransactionItem>?>(null) }
+    var showPaymentDialog by remember { mutableStateOf<Transaction?>(null) }
+    var selectedPaymentMethod by remember { mutableStateOf("Cash") }
 
     Column(
         modifier = modifier
@@ -138,10 +140,7 @@ fun ActiveOrdersTabContent(
                             salesViewModel.syncLocalActiveOrders()
                         },
                         onProcessPayment = {
-                            // Untuk simplifikasi: saat dibayar, status jadi COMPLETED, cetak struk kasir
-                            storageHelper.updateTransactionStatus(order.kodeTransaksi, "COMPLETED")
-                            salesViewModel.syncLocalActiveOrders()
-                            showReceiptDialog = order
+                            showPaymentDialog = order
                         },
                         onUpdateItemServedQty = { itemId, newQty ->
                             storageHelper.updateItemServedQty(order.kodeTransaksi, itemId, newQty)
@@ -360,7 +359,7 @@ fun ActiveOrdersTabContent(
 
     if (showReceiptDialog != null) {
         val transaction = showReceiptDialog!!
-        val receiptText = salesViewModel.formatReceipt(transaction)
+        val receiptText = salesViewModel.formatReceipt(transaction, selectedPaymentMethod)
         
         AlertDialog(
             onDismissRequest = { showReceiptDialog = null },
@@ -463,7 +462,7 @@ fun ActiveOrdersTabContent(
 
     if (showPrinterDialog) {
         val transactionForPrint = showReceiptDialog
-        val receiptTextToPrint = if (transactionForPrint != null) salesViewModel.formatReceipt(transactionForPrint) else ""
+        val receiptTextToPrint = if (transactionForPrint != null) salesViewModel.formatReceipt(transactionForPrint, selectedPaymentMethod) else ""
         AlertDialog(
             onDismissRequest = { showPrinterDialog = false },
             title = { Text("Pilih Printer Bluetooth") },
@@ -550,6 +549,51 @@ fun ActiveOrdersTabContent(
                     }) {
                         Text("Print")
                     }
+                }
+            }
+        )
+    }
+
+    if (showPaymentDialog != null) {
+        val transaction = showPaymentDialog!!
+        AlertDialog(
+            onDismissRequest = { showPaymentDialog = null },
+            title = { Text("Pilih Metode Pembayaran") },
+            text = {
+                Column {
+                    Text("Total Tagihan: ${formatRupiah(transaction.totalSetelahDiskon)}", fontWeight = FontWeight.Bold, fontSize = 18.sp)
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Text("Metode Pembayaran:", style = MaterialTheme.typography.bodyMedium, color = Color.Gray)
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        listOf("Cash", "QRIS", "Transfer").forEach { method ->
+                            FilterChip(
+                                selected = selectedPaymentMethod == method,
+                                onClick = { selectedPaymentMethod = method },
+                                label = { Text(method) }
+                            )
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                Button(onClick = {
+                    storageHelper.updateTransactionPaymentMethod(transaction.kodeTransaksi, selectedPaymentMethod)
+                    storageHelper.updateTransactionStatus(transaction.kodeTransaksi, "COMPLETED")
+                    salesViewModel.syncLocalActiveOrders()
+                    showPaymentDialog = null
+                    showReceiptDialog = transaction
+                }) {
+                    Text("Konfirmasi Bayar")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showPaymentDialog = null }) {
+                    Text("Batal")
                 }
             }
         )

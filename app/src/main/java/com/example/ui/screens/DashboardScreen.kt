@@ -258,9 +258,8 @@ fun DashboardScreen(
         storageHelper.saveMenuList(menuList)
     }
 
-    LaunchedEffect(transaksiList.toList()) {
-        storageHelper.saveTransaksiList(transaksiList)
-    }
+    // LaunchedEffect(transaksiList.toList()) dihilangkan agar tidak menimpa storageHelper tanpa rescue logic
+    // storageHelper.saveTransaksiList(transaksiList)
 
     LaunchedEffect(biayaList.toList()) {
         storageHelper.saveBiayaList(biayaList)
@@ -272,6 +271,18 @@ fun DashboardScreen(
         if (freshData != transaksiList.toList()) {
             transaksiList.clear()
             transaksiList.addAll(freshData)
+        }
+    }
+
+    // Polling lokal untuk sinkronisasi daftar transaksi secara real-time dari LocalStorage
+    LaunchedEffect(Unit) {
+        while (true) {
+            kotlinx.coroutines.delay(2000)
+            val freshData = storageHelper.getTransaksiList()
+            if (freshData != transaksiList.toList()) {
+                transaksiList.clear()
+                transaksiList.addAll(freshData)
+            }
         }
     }
 
@@ -318,8 +329,47 @@ fun DashboardScreen(
         try {
             val response = com.example.data.api.RetrofitClient.getTransactionApiService(mContext).getTransactions()
             if (response.isSuccessful && response.body()?.data != null) {
+                val flatList = response.body()!!.data!!.toMutableList()
+                val localFlatList = storageHelper.getTransaksiList()
+                val unsyncedUpdates = storageHelper.getUnsyncedStatusUpdates().map { it.transactionId }
+
+                for (i in flatList.indices) {
+                    val flatIt = flatList[i]
+                    val lastUpdate = storageHelper.getLastStatusUpdateTime(flatIt.idTransaksi)
+                    val hasUnsynced = unsyncedUpdates.contains(flatIt.idTransaksi)
+                    val localMatch = localFlatList.find { it.idTransaksi == flatIt.idTransaksi }
+                    if (localMatch != null) {
+                        if (localMatch.orderStatus == "COMPLETED" || hasUnsynced || System.currentTimeMillis() - lastUpdate < 15000) {
+                            flatList[i] = flatList[i].copy(
+                                orderStatus = localMatch.orderStatus,
+                                metodePembayaran = localMatch.metodePembayaran,
+                                catatan = localMatch.catatan
+                            )
+                        }
+                    }
+                }
+                
+                val serverTxIds = flatList.map { it.idTransaksi }.toSet()
+                val unsyncedTxIdsSet = storageHelper.getUnsyncedTransactions().mapNotNull { it.idTransaksi }.toSet()
+                val sdfTime = java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'", java.util.Locale.getDefault())
+                sdfTime.timeZone = java.util.TimeZone.getTimeZone("UTC")
+                val currentTime = System.currentTimeMillis()
+
+                val missingLocalFlat = localFlatList.filter { 
+                    if (it.idTransaksi in serverTxIds) return@filter false
+                    if (it.idTransaksi in unsyncedTxIdsSet) return@filter true
+                    try {
+                        val timeMs = sdfTime.parse(it.waktu)?.time ?: 0L
+                        currentTime - timeMs < 300000 // Keep if less than 5 minutes old
+                    } catch (e: Exception) { false }
+                }
+                if (missingLocalFlat.isNotEmpty()) {
+                    flatList.addAll(missingLocalFlat)
+                }
+
                 transaksiList.clear()
-                transaksiList.addAll(response.body()!!.data!!)
+                transaksiList.addAll(flatList)
+                storageHelper.saveTransaksiList(flatList)
             }
         } catch (e: Exception) {}
 
@@ -840,8 +890,46 @@ fun PenjualanTabContent(
                         try {
                             val response = com.example.data.api.RetrofitClient.getTransactionApiService(mContext).getTransactions()
                             if (response.isSuccessful && response.body()?.data != null) {
+                                val flatList = response.body()!!.data!!.toMutableList()
+                                val localFlatList = storageHelper.getTransaksiList()
+                                val unsyncedUpdates = storageHelper.getUnsyncedStatusUpdates().map { it.transactionId }
+                                for (i in flatList.indices) {
+                                    val flatIt = flatList[i]
+                                    val lastUpdate = storageHelper.getLastStatusUpdateTime(flatIt.idTransaksi)
+                                    val hasUnsynced = unsyncedUpdates.contains(flatIt.idTransaksi)
+                                    val localMatch = localFlatList.find { it.idTransaksi == flatIt.idTransaksi }
+                                    if (localMatch != null) {
+                                        if (localMatch.orderStatus == "COMPLETED" || hasUnsynced || System.currentTimeMillis() - lastUpdate < 15000) {
+                                            flatList[i] = flatList[i].copy(
+                                                orderStatus = localMatch.orderStatus,
+                                                metodePembayaran = localMatch.metodePembayaran,
+                                                catatan = localMatch.catatan
+                                            )
+                                        }
+                                    }
+                                }
+
+                                val serverTxIds = flatList.map { it.idTransaksi }.toSet()
+                                val unsyncedTxIdsSet = storageHelper.getUnsyncedTransactions().mapNotNull { it.idTransaksi }.toSet()
+                                val sdfTime = java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'", java.util.Locale.getDefault())
+                                sdfTime.timeZone = java.util.TimeZone.getTimeZone("UTC")
+                                val currentTime = System.currentTimeMillis()
+
+                                val missingLocalFlat = localFlatList.filter { 
+                                    if (it.idTransaksi in serverTxIds) return@filter false
+                                    if (it.idTransaksi in unsyncedTxIdsSet) return@filter true
+                                    try {
+                                        val timeMs = sdfTime.parse(it.waktu)?.time ?: 0L
+                                        currentTime - timeMs < 300000
+                                    } catch (e: Exception) { false }
+                                }
+                                if (missingLocalFlat.isNotEmpty()) {
+                                    flatList.addAll(missingLocalFlat)
+                                }
+
                                 transaksiList.clear()
-                                transaksiList.addAll(response.body()!!.data!!)
+                                transaksiList.addAll(flatList)
+                                storageHelper.saveTransaksiList(flatList)
                                 snackbarHostState.showSnackbar("Data berhasil diperbarui")
                             }
                         } catch (e: Exception) {
@@ -1433,17 +1521,25 @@ fun PenjualanTabContent(
                                  )
                                  coroutineScope.launch {
                                      try {
+                                         val isUnknownProduct = menuList.none { it.id == newTrx.id }
+                                         val rawProductId = if (isUnknownProduct) null else newTrx.id.removePrefix("PRD-").toIntOrNull()?.toString()
                                          val apiItem = com.example.data.TransactionItemRequest(
                                              namaItem = newTrx.namaItem,
                                              jumlah = newTrx.jumlah,
                                              harga = newTrx.harga,
-                                             catatan = newTrx.catatan
+                                             catatan = newTrx.catatan,
+                                             product_id = rawProductId,
+                                             quantity = newTrx.jumlah,
+                                             unit_price = newTrx.harga,
+                                             subtotal = newTrx.harga * newTrx.jumlah
                                          )
                                          val request = com.example.data.TransactionRequest(
                                              idTransaksi = newTrx.idTransaksi,
                                              waktu = newTrx.waktu,
                                              dicatatOleh = newTrx.dicatatOleh,
                                              payment_method = "CASH",
+                                             status = "COMPLETED",
+                                             orderStatus = "COMPLETED",
                                              items = listOf(apiItem)
                                          )
                                          com.example.data.api.RetrofitClient.getTransactionApiService(mContext).createTransaction(request)
