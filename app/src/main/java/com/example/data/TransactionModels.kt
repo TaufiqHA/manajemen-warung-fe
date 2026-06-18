@@ -77,3 +77,15 @@ data class UnsyncedStatusUpdate(
     val transactionId: String,
     val status: String
 )
+
+data class UpdateTransactionItemRequest(
+    val quantity: Int,
+    val subtotal: Double
+)
+
+data class UnsyncedItemUpdate(
+    val transactionId: String,
+    val itemId: String,
+    val quantity: Int,
+    val subtotal: Double
+)

@@ -58,6 +58,7 @@ class SalesViewModel(application: Application) : AndroidViewModel(application) {
                     val flatList = response.body()!!.data!!.toMutableList()
                     val localFlatList = storageHelper.getTransaksiList()
                     val unsyncedUpdates = storageHelper.getUnsyncedStatusUpdates().map { it.transactionId }
+                    val unsyncedItemUpdates = storageHelper.getUnsyncedItemUpdates()
 
                     for (i in flatList.indices) {
                         val flatIt = flatList[i]
@@ -129,17 +130,28 @@ class SalesViewModel(application: Application) : AndroidViewModel(application) {
                             
                             val mergedItems = newTx.items.map { newIt ->
                                 val localIt = localTx.items.find { it.itemId == newIt.itemId }
-                                newIt.copy(servedQty = localIt?.servedQty ?: 0)
+                                val lastItemUpdate = storageHelper.getLastItemUpdateTime(localTx.kodeTransaksi, newIt.itemId)
+                                val hasUnsyncedItem = unsyncedItemUpdates.any { it.transactionId == localTx.kodeTransaksi && it.itemId == newIt.itemId }
+                                
+                                if (localIt != null && (hasUnsyncedItem || System.currentTimeMillis() - lastItemUpdate < 15000)) {
+                                    localIt
+                                } else {
+                                    newIt.copy(servedQty = localIt?.servedQty ?: 0)
+                                }
                             }
-                            if (localTx.items != mergedItems || localTx.totalHarga != newTx.totalHarga) {
+                            
+                            val resolvedTotalHarga = if (localTx.items == mergedItems) localTx.totalHarga else mergedItems.sumOf { it.subTotal }
+                            val resolvedTotalSetelahDiskon = if (localTx.items == mergedItems) localTx.totalSetelahDiskon else (resolvedTotalHarga - localTx.diskonNominal)
+                            
+                            if (localTx.items != mergedItems || localTx.totalHarga != resolvedTotalHarga) {
                                 txChanged = true
                             }
                             if (txChanged) {
                                 localTransactions[index] = localTx.copy(
                                     status = resolvedStatus,
                                     items = mergedItems,
-                                    totalHarga = newTx.totalHarga,
-                                    totalSetelahDiskon = newTx.totalSetelahDiskon
+                                    totalHarga = resolvedTotalHarga,
+                                    totalSetelahDiskon = resolvedTotalSetelahDiskon
                                 )
                                 hasChanges = true
                             }
