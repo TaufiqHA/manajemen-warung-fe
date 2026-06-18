@@ -2751,10 +2751,11 @@ fun LabaRugiTabContent(
     }
 
     val filteredTransactions = remember(transaksiList.toList(), selectedLabaDateFilter) {
+        val completedOnly = transaksiList.filter { it.orderStatus == "COMPLETED" || it.orderStatus == null }
         if (selectedLabaDateFilter == "Semua") {
-            transaksiList
+            completedOnly
         } else {
-            transaksiList.filter { isTrxMatchingFilter(it.idTransaksi, selectedLabaDateFilter) }
+            completedOnly.filter { isTrxMatchingFilter(it.idTransaksi, selectedLabaDateFilter) }
         }
     }
 
