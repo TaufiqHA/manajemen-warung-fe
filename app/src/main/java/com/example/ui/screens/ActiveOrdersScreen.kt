@@ -556,12 +556,47 @@ fun ActiveOrdersTabContent(
 
     if (showPaymentDialog != null) {
         val transaction = showPaymentDialog!!
+        var discountInput by remember { mutableStateOf("") }
+        var isDiscountPercent by remember { mutableStateOf(false) }
+
+        val discountAmount = discountInput.toLongOrNull() ?: 0L
+        val diskonNominal = if (isDiscountPercent) {
+            (transaction.totalHarga * discountAmount / 100)
+        } else {
+            discountAmount
+        }
+        val totalAfterDiscount = (transaction.totalHarga - diskonNominal).coerceAtLeast(0L)
+
         AlertDialog(
             onDismissRequest = { showPaymentDialog = null },
             title = { Text("Pilih Metode Pembayaran") },
             text = {
                 Column {
-                    Text("Total Tagihan: ${formatRupiah(transaction.totalSetelahDiskon)}", fontWeight = FontWeight.Bold, fontSize = 18.sp)
+                    Text("Total Pesanan: ${formatRupiah(transaction.totalHarga)}", color = Color.Gray)
+                    Spacer(modifier = Modifier.height(8.dp))
+                    
+                    OutlinedTextField(
+                        value = discountInput,
+                        onValueChange = { discountInput = it },
+                        label = { Text(if (isDiscountPercent) "Diskon (%)" else "Diskon (Rp)") },
+                        keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = androidx.compose.ui.text.input.KeyboardType.Number),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.End
+                    ) {
+                        Text("Persen (%)")
+                        Switch(
+                            checked = isDiscountPercent,
+                            onCheckedChange = { isDiscountPercent = it }
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Text("Total Tagihan: ${formatRupiah(totalAfterDiscount)}", fontWeight = FontWeight.Bold, fontSize = 18.sp)
                     Spacer(modifier = Modifier.height(16.dp))
                     Text("Metode Pembayaran:", style = MaterialTheme.typography.bodyMedium, color = Color.Gray)
                     Spacer(modifier = Modifier.height(8.dp))
@@ -582,11 +617,24 @@ fun ActiveOrdersTabContent(
             },
             confirmButton = {
                 Button(onClick = {
+                    storageHelper.updateTransactionDiscount(
+                        transaction.kodeTransaksi,
+                        if (isDiscountPercent) discountAmount.toDouble() else 0.0,
+                        if (!isDiscountPercent) discountAmount else diskonNominal,
+                        totalAfterDiscount
+                    )
                     storageHelper.updateTransactionPaymentMethod(transaction.kodeTransaksi, selectedPaymentMethod)
                     storageHelper.updateTransactionStatus(transaction.kodeTransaksi, "COMPLETED")
                     salesViewModel.syncLocalActiveOrders()
+                    
                     showPaymentDialog = null
-                    showReceiptDialog = transaction
+                    
+                    val updatedTransaction = storageHelper.getNestedTransactions().find { it.kodeTransaksi == transaction.kodeTransaksi }
+                    showReceiptDialog = updatedTransaction ?: transaction.copy(
+                        diskonPersen = if (isDiscountPercent) discountAmount.toDouble() else 0.0,
+                        diskonNominal = if (!isDiscountPercent) discountAmount else diskonNominal,
+                        totalSetelahDiskon = totalAfterDiscount
+                    )
                 }) {
                     Text("Konfirmasi Bayar")
                 }

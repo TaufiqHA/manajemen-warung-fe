@@ -281,6 +281,20 @@ class LocalStorageHelper(private val context: Context) {
         if (flatUpdated) saveTransaksiList(flatList)
     }
 
+    fun updateTransactionDiscount(kodeTransaksi: String, diskonPersen: Double, diskonNominal: Long, totalSetelahDiskon: Long) {
+        val list = getNestedTransactions().toMutableList()
+        val index = list.indexOfFirst { it.kodeTransaksi == kodeTransaksi }
+        if (index != -1) {
+            val transaction = list[index]
+            list[index] = transaction.copy(
+                diskonPersen = diskonPersen,
+                diskonNominal = diskonNominal,
+                totalSetelahDiskon = totalSetelahDiskon
+            )
+            saveNestedTransactions(list)
+        }
+    }
+
     fun updateItemServedQty(kodeTransaksi: String, itemId: String, newServedQty: Int) {
         val list = getNestedTransactions().toMutableList()
         val txIndex = list.indexOfFirst { it.kodeTransaksi == kodeTransaksi }
