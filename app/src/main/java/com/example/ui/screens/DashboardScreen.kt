@@ -1991,6 +1991,7 @@ fun BiayaTabContent(
 ) {
     val context = androidx.compose.ui.platform.LocalContext.current
     val mContext = context
+    val storageHelper = remember { com.example.utils.LocalStorageHelper(context) }
     val coroutineScope = rememberCoroutineScope()
     var showAddForm by remember { mutableStateOf(false) }
     var itemToDelete by remember { mutableStateOf<BiayaOperasional?>(null) }
@@ -2009,8 +2010,13 @@ fun BiayaTabContent(
 
     fun getCalendarForBiaya(tanggalStr: String): java.util.Calendar? {
         return try {
+            val cleanedStr = if (tanggalStr.contains(", ")) {
+                tanggalStr.substringAfter(", ").trim()
+            } else {
+                tanggalStr.trim()
+            }
             val sdf = java.text.SimpleDateFormat("d MMMM yyyy", java.util.Locale("id", "ID"))
-            val date = sdf.parse(tanggalStr) ?: return null
+            val date = sdf.parse(cleanedStr) ?: return null
             val cal = java.util.Calendar.getInstance()
             cal.time = date
             cal
@@ -2077,8 +2083,31 @@ fun BiayaTabContent(
                     style = MaterialTheme.typography.titleLarge,
                     fontWeight = FontWeight.Bold
                 )
-                IconButton(onClick = { generateLaporanBiayaPdf(context, filteredList) }) {
-                    Icon(imageVector = AppIcons.Pdf, contentDescription = "Export PDF", tint = MaterialTheme.colorScheme.primary)
+                Row {
+                    IconButton(onClick = { 
+                        coroutineScope.launch {
+                            try {
+                                android.widget.Toast.makeText(mContext, "Memperbarui data...", android.widget.Toast.LENGTH_SHORT).show()
+                                val response = com.example.data.api.RetrofitClient.getExpenseApiService(mContext).getExpenses(null, null, null)
+                                if (response.isSuccessful && response.body()?.data != null) {
+                                    val freshData = response.body()!!.data!!
+                                    biayaList.clear()
+                                    biayaList.addAll(freshData)
+                                    storageHelper.saveBiayaList(biayaList)
+                                    android.widget.Toast.makeText(mContext, "Data diperbarui", android.widget.Toast.LENGTH_SHORT).show()
+                                } else {
+                                    android.widget.Toast.makeText(mContext, "Gagal memperbarui", android.widget.Toast.LENGTH_SHORT).show()
+                                }
+                            } catch (e: Exception) {
+                                android.widget.Toast.makeText(mContext, "Error: ${e.message}", android.widget.Toast.LENGTH_SHORT).show()
+                            }
+                        }
+                    }) {
+                        Icon(imageVector = AppIcons.Refresh, contentDescription = "Refresh", tint = MaterialTheme.colorScheme.primary)
+                    }
+                    IconButton(onClick = { generateLaporanBiayaPdf(context, filteredList) }) {
+                        Icon(imageVector = AppIcons.Pdf, contentDescription = "Export PDF", tint = MaterialTheme.colorScheme.primary)
+                    }
                 }
             }
             Spacer(modifier = Modifier.height(16.dp))
@@ -2418,11 +2447,29 @@ fun BiayaTabContent(
                                     )
                                     coroutineScope.launch {
                                         try {
-                                             com.example.data.api.RetrofitClient.getExpenseApiService(mContext).updateExpense(updatedExpense.id, updatedExpense)
-                                             biayaViewModel.loadExpenses()
-                                        } catch (e: Exception) {}
+                                             val expenseRequest = com.example.data.api.ExpenseRequest(
+                                                 kategori = updatedExpense.kategori,
+                                                 keterangan = updatedExpense.keterangan,
+                                                 jumlah = updatedExpense.jumlah,
+                                                 tanggal = updatedExpense.tanggal,
+                                                 pembuat = updatedExpense.pembuat
+                                             )
+                                             val response = com.example.data.api.RetrofitClient.getExpenseApiService(mContext).updateExpense(updatedExpense.id, expenseRequest)
+                                             if (response.isSuccessful) {
+                                                 android.widget.Toast.makeText(mContext, "Berhasil update database", android.widget.Toast.LENGTH_SHORT).show()
+                                                 biayaViewModel.loadExpenses()
+                                             } else {
+                                                 val errorBody = response.errorBody()?.string() ?: "Unknown error"
+                                                 android.util.Log.e("BiayaOperasional", "Gagal update: $errorBody")
+                                                 android.widget.Toast.makeText(mContext, "Gagal simpan ke DB: ${response.code()}", android.widget.Toast.LENGTH_LONG).show()
+                                             }
+                                        } catch (e: Exception) {
+                                             android.util.Log.e("BiayaOperasional", "Exception saat update", e)
+                                             android.widget.Toast.makeText(mContext, "Error jaringan: ${e.message}", android.widget.Toast.LENGTH_LONG).show()
+                                        }
                                     }
                                     biayaList[index] = updatedExpense
+                                    storageHelper.saveBiayaList(biayaList)
                                     if (false) itemToEdit!!.copy(
                                         kategori = selectedKategori,
                                         keterangan = keterangan,
@@ -2442,11 +2489,29 @@ fun BiayaTabContent(
                                 )
                                 coroutineScope.launch {
                                     try {
-                                        com.example.data.api.RetrofitClient.getExpenseApiService(mContext).addExpense(newExpense)
-                                        biayaViewModel.loadExpenses()
-                                    } catch (e: Exception) {}
+                                        val expenseRequest = com.example.data.api.ExpenseRequest(
+                                            kategori = newExpense.kategori,
+                                            keterangan = newExpense.keterangan,
+                                            jumlah = newExpense.jumlah,
+                                            tanggal = newExpense.tanggal,
+                                            pembuat = newExpense.pembuat
+                                        )
+                                        val response = com.example.data.api.RetrofitClient.getExpenseApiService(mContext).addExpense(expenseRequest)
+                                        if (response.isSuccessful) {
+                                            android.widget.Toast.makeText(mContext, "Berhasil simpan ke database", android.widget.Toast.LENGTH_SHORT).show()
+                                            biayaViewModel.loadExpenses()
+                                        } else {
+                                            val errorBody = response.errorBody()?.string() ?: "Unknown error"
+                                            android.util.Log.e("BiayaOperasional", "Gagal simpan: $errorBody")
+                                            android.widget.Toast.makeText(mContext, "Gagal simpan ke DB: ${response.code()}", android.widget.Toast.LENGTH_LONG).show()
+                                        }
+                                    } catch (e: Exception) {
+                                        android.util.Log.e("BiayaOperasional", "Exception saat simpan", e)
+                                        android.widget.Toast.makeText(mContext, "Error jaringan: ${e.message}", android.widget.Toast.LENGTH_LONG).show()
+                                    }
                                 }
                                 biayaList.add(newExpense)
+                                storageHelper.saveBiayaList(biayaList)
                                 if (false) biayaList.add(
                                     BiayaOperasional(
                                         id = (biayaList.size + 1).toString(),
@@ -2488,6 +2553,7 @@ fun BiayaTabContent(
                         } catch (e: Exception) {}
                     }
                     biayaList.remove(item)
+                    storageHelper.saveBiayaList(biayaList)
                     itemToDelete = null
                 },
                 onDismiss = { itemToDelete = null }

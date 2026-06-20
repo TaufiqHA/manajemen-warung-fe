@@ -5,6 +5,14 @@ import com.example.data.BaseResponse
 import retrofit2.Response
 import retrofit2.http.*
 
+data class ExpenseRequest(
+    val kategori: String,
+    val keterangan: String,
+    val jumlah: Double,
+    val tanggal: String,
+    val pembuat: String? = null
+)
+
 interface ExpenseApiService {
     @GET("api/v1/expenses")
     suspend fun getExpenses(
@@ -15,13 +23,13 @@ interface ExpenseApiService {
 
     @POST("api/v1/expenses")
     suspend fun addExpense(
-        @Body expense: BiayaOperasional
+        @Body expense: ExpenseRequest
     ): Response<BaseResponse<BiayaOperasional>>
 
     @PUT("api/v1/expenses/{id}")
     suspend fun updateExpense(
         @Path("id") id: String,
-        @Body expense: BiayaOperasional
+        @Body expense: ExpenseRequest
     ): Response<BaseResponse<BiayaOperasional>>
 
     @DELETE("api/v1/expenses/{id}")
