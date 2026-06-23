@@ -40,11 +40,11 @@ class SalesViewModel(application: Application) : AndroidViewModel(application) {
     val activeOrders = _activeOrders.asStateFlow()
 
     fun loadActiveOrders() {
-        _activeOrders.value = storageHelper.getNestedTransactions()
+        // Bypass local storage
     }
 
     fun syncLocalActiveOrders() {
-        _activeOrders.value = storageHelper.getNestedTransactions()
+        // Bypass local storage
     }
 
     fun fetchActiveOrders() {
@@ -56,41 +56,37 @@ class SalesViewModel(application: Application) : AndroidViewModel(application) {
                     storageHelper.syncUnsyncedData()
                     
                     val flatList = response.body()!!.data!!.toMutableList()
-                    val localFlatList = storageHelper.getTransaksiList()
-                    val unsyncedUpdates = storageHelper.getUnsyncedStatusUpdates().map { it.transactionId }
-                    val unsyncedItemUpdates = storageHelper.getUnsyncedItemUpdates()
-
-                    for (i in flatList.indices) {
-                        val flatIt = flatList[i]
-                        val lastUpdate = storageHelper.getLastStatusUpdateTime(flatIt.idTransaksi)
-                        val hasUnsynced = unsyncedUpdates.contains(flatIt.idTransaksi)
-                        
-                        val localMatch = localFlatList.find { it.idTransaksi == flatIt.idTransaksi }
-                        if (localMatch != null) {
-                            if (localMatch.orderStatus == "COMPLETED" || hasUnsynced || System.currentTimeMillis() - lastUpdate < 15000) {
-                                flatList[i] = flatList[i].copy(
-                                    orderStatus = localMatch.orderStatus,
-                                    metodePembayaran = localMatch.metodePembayaran,
-                                    catatan = localMatch.catatan
-                                )
-                            }
-                        }
-                    }
                     val grouped = flatList.groupBy { it.idTransaksi }
                     val newTransactions = grouped.map { (idTx, items) ->
                         val firstItem = items.first()
-                        val sdf = java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'", java.util.Locale.getDefault())
-                        sdf.timeZone = java.util.TimeZone.getTimeZone("UTC")
-                        val timeMs = try { sdf.parse(firstItem.waktu)?.time ?: System.currentTimeMillis() } catch(e: Exception) { System.currentTimeMillis() }
+                        var timeMs = System.currentTimeMillis()
+                        if (firstItem.waktu.isNotBlank()) {
+                            try {
+                                val parser = java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSSSSS'Z'", java.util.Locale.getDefault()).apply { timeZone = java.util.TimeZone.getTimeZone("UTC") }
+                                timeMs = parser.parse(firstItem.waktu)?.time ?: timeMs
+                            } catch (e: Exception) {
+                                try {
+                                    val parser = java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", java.util.Locale.getDefault()).apply { timeZone = java.util.TimeZone.getTimeZone("UTC") }
+                                    timeMs = parser.parse(firstItem.waktu)?.time ?: timeMs
+                                } catch (e2: Exception) {
+                                    try {
+                                        val parser = java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'", java.util.Locale.getDefault()).apply { timeZone = java.util.TimeZone.getTimeZone("UTC") }
+                                        timeMs = parser.parse(firstItem.waktu)?.time ?: timeMs
+                                    } catch (e3: Exception) {}
+                                }
+                            }
+                        }
                         
+                        val localTx = storageHelper.getNestedTransactions().find { it.kodeTransaksi == idTx }
                         val transactionItems = items.map {
+                            val localServedQty = localTx?.items?.find { localItem -> localItem.itemId == it.id }?.servedQty ?: 0
                             com.example.data.TransactionItem(
                                 itemId = it.id,
                                 namaBarang = it.namaItem,
                                 qty = it.jumlah,
                                 harga = it.harga.toLong(),
                                 subTotal = (it.jumlah * it.harga).toLong(),
-                                servedQty = 0
+                                servedQty = localServedQty
                             )
                         }
                         val total = transactionItems.sumOf { it.subTotal }
@@ -107,91 +103,7 @@ class SalesViewModel(application: Application) : AndroidViewModel(application) {
                         )
                     }
 
-                    val localTransactions = storageHelper.getNestedTransactions().toMutableList()
-                    var hasChanges = false
-
-                    for (newTx in newTransactions) {
-                        val index = localTransactions.indexOfFirst { it.kodeTransaksi == newTx.kodeTransaksi }
-                        if (index != -1) {
-                            val localTx = localTransactions[index]
-                            var txChanged = false
-                            
-                            var resolvedStatus = newTx.status
-                            if (localTx.status != newTx.status) {
-                                val lastUpdate = storageHelper.getLastStatusUpdateTime(localTx.kodeTransaksi)
-                                val hasUnsynced = unsyncedUpdates.contains(localTx.kodeTransaksi)
-                                if (localTx.status == "COMPLETED" || hasUnsynced || System.currentTimeMillis() - lastUpdate < 15000) {
-                                    // Ignore server status if we just updated it locally, it is unsynced, or already COMPLETED locally
-                                    resolvedStatus = localTx.status
-                                } else {
-                                    txChanged = true
-                                }
-                            }
-                            
-                            val mergedItems = newTx.items.map { newIt ->
-                                val localIt = localTx.items.find { it.itemId == newIt.itemId }
-                                val lastItemUpdate = storageHelper.getLastItemUpdateTime(localTx.kodeTransaksi, newIt.itemId)
-                                val hasUnsyncedItem = unsyncedItemUpdates.any { it.transactionId == localTx.kodeTransaksi && it.itemId == newIt.itemId }
-                                
-                                if (localIt != null && (hasUnsyncedItem || System.currentTimeMillis() - lastItemUpdate < 15000)) {
-                                    localIt
-                                } else {
-                                    newIt.copy(servedQty = localIt?.servedQty ?: 0)
-                                }
-                            }
-                            
-                            val resolvedTotalHarga = if (localTx.items == mergedItems) localTx.totalHarga else mergedItems.sumOf { it.subTotal }
-                            val resolvedTotalSetelahDiskon = if (localTx.items == mergedItems) localTx.totalSetelahDiskon else (resolvedTotalHarga - localTx.diskonNominal)
-                            
-                            if (localTx.items != mergedItems || localTx.totalHarga != resolvedTotalHarga) {
-                                txChanged = true
-                            }
-                            if (txChanged) {
-                                localTransactions[index] = localTx.copy(
-                                    status = resolvedStatus,
-                                    items = mergedItems,
-                                    totalHarga = resolvedTotalHarga,
-                                    totalSetelahDiskon = resolvedTotalSetelahDiskon
-                                )
-                                hasChanges = true
-                            }
-                        } else {
-                            localTransactions.add(newTx)
-                            hasChanges = true
-                        }
-                    }
-
-                    // --- LOCAL DATA RESCUE ---
-                    val serverTxIds = flatList.map { it.idTransaksi }.toSet()
-                    val unsyncedTxIdsSet = storageHelper.getUnsyncedTransactions().mapNotNull { it.idTransaksi }.toSet()
-                    val sdfTime = java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'", java.util.Locale.getDefault())
-                    sdfTime.timeZone = java.util.TimeZone.getTimeZone("UTC")
-                    val currentTime = System.currentTimeMillis()
-
-                    val missingLocalFlat = localFlatList.filter { 
-                        if (it.idTransaksi in serverTxIds) return@filter false
-                        if (it.idTransaksi in unsyncedTxIdsSet) return@filter true
-                        
-                        try {
-                            val timeMs = sdfTime.parse(it.waktu)?.time ?: 0L
-                            currentTime - timeMs < 300000 // Keep if less than 5 minutes old
-                        } catch (e: Exception) {
-                            false
-                        }
-                    }
-                    if (missingLocalFlat.isNotEmpty()) {
-                        flatList.addAll(missingLocalFlat)
-                    }
-                    // -------------------------
-
-                    if (hasChanges || flatList != localFlatList) {
-                        storageHelper.saveTransaksiList(flatList)
-                        storageHelper.saveNestedTransactions(localTransactions)
-                        _activeOrders.value = localTransactions
-                    } else if (_activeOrders.value != localTransactions) {
-                        storageHelper.saveTransaksiList(flatList)
-                        _activeOrders.value = localTransactions
-                    }
+                    _activeOrders.value = newTransactions
                 }
             } catch (e: Exception) {}
         }
@@ -202,6 +114,48 @@ class SalesViewModel(application: Application) : AndroidViewModel(application) {
             while(true) {
                 fetchActiveOrders()
                 kotlinx.coroutines.delay(10000)
+            }
+        }
+    }
+
+    fun updateItemServedQty(kodeTransaksi: String, itemId: String, newServedQty: Int) {
+        storageHelper.updateItemServedQty(kodeTransaksi, itemId, newServedQty)
+        
+        val currentList = _activeOrders.value.toMutableList()
+        val index = currentList.indexOfFirst { it.kodeTransaksi == kodeTransaksi }
+        if (index != -1) {
+            val order = currentList[index]
+            val newItems = order.items.map {
+                if (it.itemId == itemId) it.copy(servedQty = newServedQty) else it
+            }
+            currentList[index] = order.copy(items = newItems)
+            _activeOrders.value = currentList
+        }
+    }
+
+    fun updateActiveOrderStatus(
+        kodeTransaksi: String, 
+        newStatus: String, 
+        paymentMethod: String? = null,
+        onSuccess: () -> Unit = {}, 
+        onError: (String) -> Unit = {}
+    ) {
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                val validPaymentMethod = paymentMethod?.uppercase()
+                val response = com.example.data.api.RetrofitClient.getTransactionApiService(getApplication())
+                    .updateTransactionStatus(
+                        kodeTransaksi, 
+                        com.example.data.UpdateStatusRequest(newStatus, validPaymentMethod)
+                    )
+                if (response.isSuccessful) {
+                    fetchActiveOrders()
+                    launch(Dispatchers.Main) { onSuccess() }
+                } else {
+                    launch(Dispatchers.Main) { onError("Gagal: ${response.message()}") }
+                }
+            } catch (e: Exception) {
+                launch(Dispatchers.Main) { onError("Error: ${e.message}") }
             }
         }
     }

@@ -265,12 +265,18 @@ fun DashboardScreen(
         storageHelper.saveBiayaList(biayaList)
     }
 
-    // Refresh data sinkronisasi setiap kali user pindah tab (hindari Stale State/data usang)
+    // Ambil data terbaru dari server ketika pindah tab (misalnya ke Penjualan)
     LaunchedEffect(activeTab) {
-        val freshData = storageHelper.getTransaksiList()
-        if (freshData != transaksiList.toList()) {
-            transaksiList.clear()
-            transaksiList.addAll(freshData)
+        try {
+            val response = com.example.data.api.RetrofitClient.getTransactionApiService(mContext).getTransactions()
+            if (response.isSuccessful && response.body()?.data != null) {
+                val flatList = response.body()!!.data!!.toMutableList()
+                transaksiList.clear()
+                transaksiList.addAll(flatList)
+                storageHelper.saveTransaksiList(flatList)
+            }
+        } catch (e: Exception) {
+            // Abaikan jika tidak ada koneksi
         }
     }
 
@@ -330,43 +336,6 @@ fun DashboardScreen(
             val response = com.example.data.api.RetrofitClient.getTransactionApiService(mContext).getTransactions()
             if (response.isSuccessful && response.body()?.data != null) {
                 val flatList = response.body()!!.data!!.toMutableList()
-                val localFlatList = storageHelper.getTransaksiList()
-                val unsyncedUpdates = storageHelper.getUnsyncedStatusUpdates().map { it.transactionId }
-
-                for (i in flatList.indices) {
-                    val flatIt = flatList[i]
-                    val lastUpdate = storageHelper.getLastStatusUpdateTime(flatIt.idTransaksi)
-                    val hasUnsynced = unsyncedUpdates.contains(flatIt.idTransaksi)
-                    val localMatch = localFlatList.find { it.idTransaksi == flatIt.idTransaksi }
-                    if (localMatch != null) {
-                        if (localMatch.orderStatus == "COMPLETED" || hasUnsynced || System.currentTimeMillis() - lastUpdate < 15000) {
-                            flatList[i] = flatList[i].copy(
-                                orderStatus = localMatch.orderStatus,
-                                metodePembayaran = localMatch.metodePembayaran,
-                                catatan = localMatch.catatan
-                            )
-                        }
-                    }
-                }
-                
-                val serverTxIds = flatList.map { it.idTransaksi }.toSet()
-                val unsyncedTxIdsSet = storageHelper.getUnsyncedTransactions().mapNotNull { it.idTransaksi }.toSet()
-                val sdfTime = java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'", java.util.Locale.getDefault())
-                sdfTime.timeZone = java.util.TimeZone.getTimeZone("UTC")
-                val currentTime = System.currentTimeMillis()
-
-                val missingLocalFlat = localFlatList.filter { 
-                    if (it.idTransaksi in serverTxIds) return@filter false
-                    if (it.idTransaksi in unsyncedTxIdsSet) return@filter true
-                    try {
-                        val timeMs = sdfTime.parse(it.waktu)?.time ?: 0L
-                        currentTime - timeMs < 300000 // Keep if less than 5 minutes old
-                    } catch (e: Exception) { false }
-                }
-                if (missingLocalFlat.isNotEmpty()) {
-                    flatList.addAll(missingLocalFlat)
-                }
-
                 transaksiList.clear()
                 transaksiList.addAll(flatList)
                 storageHelper.saveTransaksiList(flatList)
@@ -891,42 +860,6 @@ fun PenjualanTabContent(
                             val response = com.example.data.api.RetrofitClient.getTransactionApiService(mContext).getTransactions()
                             if (response.isSuccessful && response.body()?.data != null) {
                                 val flatList = response.body()!!.data!!.toMutableList()
-                                val localFlatList = storageHelper.getTransaksiList()
-                                val unsyncedUpdates = storageHelper.getUnsyncedStatusUpdates().map { it.transactionId }
-                                for (i in flatList.indices) {
-                                    val flatIt = flatList[i]
-                                    val lastUpdate = storageHelper.getLastStatusUpdateTime(flatIt.idTransaksi)
-                                    val hasUnsynced = unsyncedUpdates.contains(flatIt.idTransaksi)
-                                    val localMatch = localFlatList.find { it.idTransaksi == flatIt.idTransaksi }
-                                    if (localMatch != null) {
-                                        if (localMatch.orderStatus == "COMPLETED" || hasUnsynced || System.currentTimeMillis() - lastUpdate < 15000) {
-                                            flatList[i] = flatList[i].copy(
-                                                orderStatus = localMatch.orderStatus,
-                                                metodePembayaran = localMatch.metodePembayaran,
-                                                catatan = localMatch.catatan
-                                            )
-                                        }
-                                    }
-                                }
-
-                                val serverTxIds = flatList.map { it.idTransaksi }.toSet()
-                                val unsyncedTxIdsSet = storageHelper.getUnsyncedTransactions().mapNotNull { it.idTransaksi }.toSet()
-                                val sdfTime = java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'", java.util.Locale.getDefault())
-                                sdfTime.timeZone = java.util.TimeZone.getTimeZone("UTC")
-                                val currentTime = System.currentTimeMillis()
-
-                                val missingLocalFlat = localFlatList.filter { 
-                                    if (it.idTransaksi in serverTxIds) return@filter false
-                                    if (it.idTransaksi in unsyncedTxIdsSet) return@filter true
-                                    try {
-                                        val timeMs = sdfTime.parse(it.waktu)?.time ?: 0L
-                                        currentTime - timeMs < 300000
-                                    } catch (e: Exception) { false }
-                                }
-                                if (missingLocalFlat.isNotEmpty()) {
-                                    flatList.addAll(missingLocalFlat)
-                                }
-
                                 transaksiList.clear()
                                 transaksiList.addAll(flatList)
                                 storageHelper.saveTransaksiList(flatList)

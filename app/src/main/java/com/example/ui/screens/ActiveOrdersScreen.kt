@@ -143,19 +143,16 @@ fun ActiveOrdersTabContent(
                             showPaymentDialog = order
                         },
                         onUpdateItemServedQty = { itemId, newQty ->
-                            storageHelper.updateItemServedQty(order.kodeTransaksi, itemId, newQty)
-                            salesViewModel.syncLocalActiveOrders()
+                            salesViewModel.updateItemServedQty(order.kodeTransaksi, itemId, newQty)
                             
                             // Check if all items are fully served
                             val updatedTx = storageHelper.getNestedTransactions().find { it.kodeTransaksi == order.kodeTransaksi }
                             if (updatedTx != null) {
                                 val allServed = updatedTx.items.all { it.servedQty >= it.qty }
                                 if (allServed && updatedTx.status == "PENDING") {
-                                    storageHelper.updateTransactionStatus(updatedTx.kodeTransaksi, "READY")
-                                    salesViewModel.syncLocalActiveOrders()
+                                    salesViewModel.updateActiveOrderStatus(updatedTx.kodeTransaksi, "READY")
                                 } else if (!allServed && updatedTx.status == "READY") {
-                                    storageHelper.updateTransactionStatus(updatedTx.kodeTransaksi, "PENDING")
-                                    salesViewModel.syncLocalActiveOrders()
+                                    salesViewModel.updateActiveOrderStatus(updatedTx.kodeTransaksi, "PENDING")
                                 }
                             }
                         },
@@ -616,27 +613,44 @@ fun ActiveOrdersTabContent(
                 }
             },
             confirmButton = {
-                Button(onClick = {
-                    storageHelper.updateTransactionDiscount(
-                        transaction.kodeTransaksi,
-                        if (isDiscountPercent) discountAmount.toDouble() else 0.0,
-                        if (!isDiscountPercent) discountAmount else diskonNominal,
-                        totalAfterDiscount
-                    )
-                    storageHelper.updateTransactionPaymentMethod(transaction.kodeTransaksi, selectedPaymentMethod)
-                    storageHelper.updateTransactionStatus(transaction.kodeTransaksi, "COMPLETED")
-                    salesViewModel.syncLocalActiveOrders()
-                    
-                    showPaymentDialog = null
-                    
-                    val updatedTransaction = storageHelper.getNestedTransactions().find { it.kodeTransaksi == transaction.kodeTransaksi }
-                    showReceiptDialog = updatedTransaction ?: transaction.copy(
-                        diskonPersen = if (isDiscountPercent) discountAmount.toDouble() else 0.0,
-                        diskonNominal = if (!isDiscountPercent) discountAmount else diskonNominal,
-                        totalSetelahDiskon = totalAfterDiscount
-                    )
-                }) {
-                    Text("Konfirmasi Bayar")
+                var isPaying by remember { mutableStateOf(false) }
+                Button(
+                    onClick = {
+                        if (isPaying) return@Button
+                        isPaying = true
+                        
+                        // Local discount update for receipt
+                        storageHelper.updateTransactionDiscount(
+                            transaction.kodeTransaksi,
+                            if (isDiscountPercent) discountAmount.toDouble() else 0.0,
+                            if (!isDiscountPercent) discountAmount else diskonNominal,
+                            totalAfterDiscount
+                        )
+                        
+                        salesViewModel.updateActiveOrderStatus(
+                            kodeTransaksi = transaction.kodeTransaksi,
+                            newStatus = "COMPLETED",
+                            paymentMethod = selectedPaymentMethod,
+                            onSuccess = {
+                                isPaying = false
+                                showPaymentDialog = null
+                                
+                                showReceiptDialog = transaction.copy(
+                                    diskonPersen = if (isDiscountPercent) discountAmount.toDouble() else 0.0,
+                                    diskonNominal = if (!isDiscountPercent) discountAmount else diskonNominal,
+                                    totalSetelahDiskon = totalAfterDiscount,
+                                    status = "COMPLETED"
+                                )
+                            },
+                            onError = { errMsg ->
+                                isPaying = false
+                                android.widget.Toast.makeText(context, errMsg, android.widget.Toast.LENGTH_SHORT).show()
+                            }
+                        )
+                    },
+                    enabled = !isPaying
+                ) {
+                    Text(if (isPaying) "Memproses..." else "Konfirmasi Bayar")
                 }
             },
             dismissButton = {
