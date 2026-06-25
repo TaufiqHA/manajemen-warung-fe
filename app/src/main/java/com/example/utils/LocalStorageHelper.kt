@@ -274,7 +274,14 @@ class LocalStorageHelper(private val context: Context) {
         var flatUpdated = false
         for (i in flatList.indices) {
             if (flatList[i].idTransaksi == kodeTransaksi) {
-                flatList[i] = flatList[i].copy(metodePembayaran = newPaymentMethod, catatan = "Via: $newPaymentMethod")
+                val newCatatan = if (newPaymentMethod == "BELUM LUNAS") "" else "Via: $newPaymentMethod"
+                flatList[i] = flatList[i].copy(
+                    payment_method = newPaymentMethod,
+                    paymentMethod = newPaymentMethod,
+                    metode_pembayaran = newPaymentMethod,
+                    metodePembayaranRaw = newPaymentMethod,
+                    catatan = newCatatan
+                )
                 flatUpdated = true
             }
         }
@@ -359,7 +366,10 @@ class LocalStorageHelper(private val context: Context) {
                     waktu = timeStr,
                     dicatatOleh = "Admin Toko",
                     catatan = "Via: Tambahan",
-                    metodePembayaran = "CASH",
+                    payment_method = "CASH",
+                    paymentMethod = "CASH",
+                    metode_pembayaran = "CASH",
+                    metodePembayaranRaw = "CASH",
                     orderStatus = transaction.status
                 )
                 flatList.add(flatItem)
@@ -410,8 +420,11 @@ class LocalStorageHelper(private val context: Context) {
                 harga = item.harga.toDouble(),
                 waktu = timeStr,
                 dicatatOleh = "Admin Toko",
-                catatan = "Via: $paymentMethod",
-                metodePembayaran = paymentMethod,
+                catatan = if (paymentMethod == "BELUM LUNAS") "" else "Via: $paymentMethod",
+                payment_method = paymentMethod,
+                paymentMethod = paymentMethod,
+                metode_pembayaran = paymentMethod,
+                metodePembayaranRaw = paymentMethod,
                 orderStatus = transaction.status
             )
             currentFlat.add(flatItem)

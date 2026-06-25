@@ -61,7 +61,10 @@ class ReportViewModel(application: Application) : AndroidViewModel(application) 
                             if (localMatch.orderStatus == "COMPLETED" || hasUnsynced || System.currentTimeMillis() - lastUpdate < 15000) {
                                 apiFlatTrx[i] = apiFlatTrx[i].copy(
                                     orderStatus = localMatch.orderStatus,
-                                    metodePembayaran = localMatch.metodePembayaran,
+                                    payment_method = localMatch.payment_method,
+                                    paymentMethod = localMatch.paymentMethod,
+                                    metode_pembayaran = localMatch.metode_pembayaran,
+                                    metodePembayaranRaw = localMatch.metodePembayaranRaw,
                                     catatan = localMatch.catatan
                                 )
                             }

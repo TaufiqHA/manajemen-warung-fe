@@ -147,9 +147,15 @@ data class TransaksiHarian(
     val waktu: String,
     val dicatatOleh: String,
     val catatan: String = "",
-    @com.squareup.moshi.Json(name = "payment_method") val metodePembayaran: String? = null,
+    @com.squareup.moshi.Json(name = "payment_method") val payment_method: String? = null,
+    @com.squareup.moshi.Json(name = "paymentMethod") val paymentMethod: String? = null,
+    @com.squareup.moshi.Json(name = "metode_pembayaran") val metode_pembayaran: String? = null,
+    @com.squareup.moshi.Json(name = "metodePembayaran") val metodePembayaranRaw: String? = null,
     val orderStatus: String? = null
-)
+) {
+    val metodePembayaran: String?
+        get() = payment_method ?: paymentMethod ?: metode_pembayaran ?: metodePembayaranRaw
+}
 
 data class BiayaOperasional(
     val id: String,
@@ -1124,9 +1130,15 @@ fun PenjualanTabContent(
                                                                     style = MaterialTheme.typography.labelMedium,
                                                                     color = Color.Gray
                                                                 )
-                                                                if (detail.catatan.isNotBlank()) {
+                                                                val fallbackPayment = detail.metodePembayaran ?: "BELUM LUNAS"
+                                                                val displayCatatan = if (detail.catatan.contains("belum lunas", ignoreCase = true)) {
+                                                                    detail.catatan.replace(Regex("(?i)(via\\s*:\\s*)?belum lunas"), "Via: $fallbackPayment").trim()
+                                                                } else {
+                                                                    detail.catatan.trim()
+                                                                }
+                                                                if (displayCatatan.isNotBlank()) {
                                                                     Text(
-                                                                        text = "Catatan: ${detail.catatan}",
+                                                                        text = "Catatan: $displayCatatan",
                                                                         style = MaterialTheme.typography.labelSmall,
                                                                         color = Color.LightGray
                                                                     )
@@ -1572,13 +1584,19 @@ fun PenjualanTabContent(
                             Text("Dicatat oleh", style = MaterialTheme.typography.bodyMedium, color = Color.Gray)
                             Text(item.dicatatOleh, style = MaterialTheme.typography.bodyMedium)
                         }
-                        if (item.catatan.isNotBlank()) {
+                        val fallbackItemPayment = item.metodePembayaran ?: "BELUM LUNAS"
+                        val displayItemCatatan = if (item.catatan.contains("belum lunas", ignoreCase = true)) {
+                            item.catatan.replace(Regex("(?i)(via\\s*:\\s*)?belum lunas"), "Via: $fallbackItemPayment").trim()
+                        } else {
+                            item.catatan.trim()
+                        }
+                        if (displayItemCatatan.isNotBlank()) {
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
                                 horizontalArrangement = Arrangement.SpaceBetween
                             ) {
                                 Text("Catatan", style = MaterialTheme.typography.bodyMedium, color = Color.Gray)
-                                Text(item.catatan, style = MaterialTheme.typography.bodyMedium)
+                                Text(displayItemCatatan, style = MaterialTheme.typography.bodyMedium)
                             }
                         }
                     }
