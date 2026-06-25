@@ -151,10 +151,16 @@ data class TransaksiHarian(
     @com.squareup.moshi.Json(name = "paymentMethod") val paymentMethod: String? = null,
     @com.squareup.moshi.Json(name = "metode_pembayaran") val metode_pembayaran: String? = null,
     @com.squareup.moshi.Json(name = "metodePembayaran") val metodePembayaranRaw: String? = null,
-    val orderStatus: String? = null
+    val orderStatus: String? = null,
+    @com.squareup.moshi.Json(name = "customer_name") val customerName: String? = null,
+    @com.squareup.moshi.Json(name = "customerName") val customerNameFallback: String? = null
+
 ) {
     val metodePembayaran: String?
         get() = payment_method ?: paymentMethod ?: metode_pembayaran ?: metodePembayaranRaw
+
+    val finalCustomerName: String
+        get() = customerName ?: customerNameFallback ?: ""
 }
 
 data class BiayaOperasional(
@@ -1795,7 +1801,7 @@ fun PenjualanTabContent(
                         TextButton(onClick = {
                             currentTransaction?.let { trx ->
                                 val quotationData = TransactionModel(
-                                    customerName = "Pelanggan Umum",
+                                    customerName = trx.customerName.ifBlank { "Pelanggan Umum" },
                                     customerAddress = "Jl. Raya Warung No. 123",
                                     items = trx.items.map { 
                                         InvoiceItem(

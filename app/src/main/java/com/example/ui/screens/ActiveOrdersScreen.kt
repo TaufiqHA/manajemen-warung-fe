@@ -695,13 +695,17 @@ fun OrderCard(
                 verticalAlignment = Alignment.Top
             ) {
                 Column(modifier = Modifier.weight(1f).padding(end = 8.dp)) {
+                    val displayName = order.customerName.ifBlank { "Pelanggan Umum" }
                     Text(
-                        text = order.customerName.ifBlank { order.kodeTransaksi },
+                        text = displayName,
                         fontWeight = FontWeight.Bold,
                         fontSize = 18.sp
                     )
-                    val bottomText = if (order.customerName.isBlank()) "Waktu: $timeStr" else "Waktu: $timeStr\nNo: ${order.kodeTransaksi}"
-                    Text(text = bottomText, style = MaterialTheme.typography.bodySmall, color = Color.Gray)
+                    Text(
+                        text = "${order.kodeTransaksi}\nWaktu: $timeStr",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Color.Gray
+                    )
                 }
                 
                 Row(verticalAlignment = Alignment.CenterVertically) {

@@ -93,7 +93,7 @@ class SalesViewModel(application: Application) : AndroidViewModel(application) {
                         com.example.data.Transaction(
                             kodeTransaksi = idTx,
                             tanggalTransaksi = timeMs,
-                            customerName = "", 
+                            customerName = firstItem.finalCustomerName, 
                             status = firstItem.orderStatus ?: "COMPLETED",
                             items = transactionItems,
                             totalHarga = total,
