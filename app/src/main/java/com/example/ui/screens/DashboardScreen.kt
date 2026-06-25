@@ -508,6 +508,39 @@ fun BerandaTabContent(
 
     val successfulTransactionsCount = groupedTransactions.size - canceledTransactionsCount
 
+    // Hitung Pengeluaran
+    val pengeluaranSummary = remember(biayaList.toList()) {
+        val todayCal = java.util.Calendar.getInstance()
+        var harian = 0.0
+        var mingguan = 0.0
+        var bulanan = 0.0
+        val sdfBiaya = java.text.SimpleDateFormat("d MMMM yyyy", java.util.Locale("id", "ID"))
+        
+        biayaList.forEach { biaya ->
+            val tanggalStr = if (biaya.tanggal.contains(", ")) biaya.tanggal.substringAfter(", ").trim() else biaya.tanggal.trim()
+            try {
+                val date = sdfBiaya.parse(tanggalStr)
+                if (date != null) {
+                    val cal = java.util.Calendar.getInstance()
+                    cal.time = date
+                    
+                    val isSameYear = cal.get(java.util.Calendar.YEAR) == todayCal.get(java.util.Calendar.YEAR)
+                    
+                    if (isSameYear && cal.get(java.util.Calendar.DAY_OF_YEAR) == todayCal.get(java.util.Calendar.DAY_OF_YEAR)) {
+                        harian += biaya.jumlah
+                    }
+                    if (isSameYear && cal.get(java.util.Calendar.WEEK_OF_YEAR) == todayCal.get(java.util.Calendar.WEEK_OF_YEAR)) {
+                        mingguan += biaya.jumlah
+                    }
+                    if (isSameYear && cal.get(java.util.Calendar.MONTH) == todayCal.get(java.util.Calendar.MONTH)) {
+                        bulanan += biaya.jumlah
+                    }
+                }
+            } catch (e: Exception) {}
+        }
+        Triple(harian, mingguan, bulanan)
+    }
+
     Column(
         modifier = modifier
             .fillMaxSize()
@@ -570,47 +603,87 @@ fun BerandaTabContent(
             color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f)
         )
         Text(
-            text = "Ringkasan hari ini",
+            text = "Ringkasan Pengeluaran",
             style = MaterialTheme.typography.titleLarge,
             fontWeight = FontWeight.Bold
         )
 
         Spacer(modifier = Modifier.height(12.dp))
 
-        // Total Sales Card
-        Card(
-            modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(16.dp),
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-            elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+        // Pengeluaran Cards (Harian, Mingguan, Bulanan)
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .horizontalScroll(rememberScrollState()),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            Column(
-                modifier = Modifier.padding(16.dp)
+            // Harian
+            Card(
+                modifier = Modifier.width(140.dp),
+                shape = RoundedCornerShape(12.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
             ) {
-                Text(
-                    text = "💰 Total Penjualan Hari Ini",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
-                )
-                Spacer(modifier = Modifier.height(8.dp))
-                Text(
-                    text = formatRupiah(totalPenjualanHarian),
-                    style = MaterialTheme.typography.titleLarge.copy(fontSize = 28.sp),
-                    fontWeight = FontWeight.ExtraBold,
-                    color = MaterialTheme.colorScheme.primary
-                )
-                Spacer(modifier = Modifier.height(4.dp))
-                val summaryText = if (canceledTransactionsCount > 0) {
-                    "$successfulTransactionsCount Transaksi Berhasil • $canceledTransactionsCount Dibatalkan"
-                } else {
-                    "$successfulTransactionsCount Transaksi Berhasil"
+                Column(modifier = Modifier.padding(12.dp)) {
+                    Text(
+                        text = "Harian",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = formatRupiah(pengeluaranSummary.first),
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = DangerColor
+                    )
                 }
-
-                Text(
-                    text = summaryText,
-                    style = MaterialTheme.typography.labelMedium,
-                    color = if (canceledTransactionsCount > 0) Color.Gray else SuccessColor
-                )
+            }
+            
+            // Mingguan
+            Card(
+                modifier = Modifier.width(140.dp),
+                shape = RoundedCornerShape(12.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+            ) {
+                Column(modifier = Modifier.padding(12.dp)) {
+                    Text(
+                        text = "Mingguan",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = formatRupiah(pengeluaranSummary.second),
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = DangerColor
+                    )
+                }
+            }
+            
+            // Bulanan
+            Card(
+                modifier = Modifier.width(140.dp),
+                shape = RoundedCornerShape(12.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+            ) {
+                Column(modifier = Modifier.padding(12.dp)) {
+                    Text(
+                        text = "Bulanan",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = formatRupiah(pengeluaranSummary.third),
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = DangerColor
+                    )
+                }
             }
         }
 
@@ -2695,8 +2768,60 @@ fun LabaRugiTabContent(
 
     fun getCalendarForBiaya(tanggalStr: String): java.util.Calendar? {
         return try {
-            val sdf = java.text.SimpleDateFormat("d MMMM yyyy", java.util.Locale("in", "ID"))
-            val date = sdf.parse(tanggalStr) ?: return null
+            var date: java.util.Date? = null
+            
+            val formats = listOf(
+                Pair("d MMMM yyyy", java.util.Locale("id", "ID")),
+                Pair("d MMMM yyyy", java.util.Locale("in", "ID")),
+                Pair("d MMMM yyyy", java.util.Locale.ENGLISH),
+                Pair("d MMMM yyyy", java.util.Locale.getDefault()),
+                Pair("EEEE, d MMMM yyyy", java.util.Locale("id", "ID")),
+                Pair("EEEE, d MMMM yyyy", java.util.Locale("in", "ID")),
+                Pair("EEEE, d MMMM yyyy", java.util.Locale.ENGLISH),
+                Pair("dd/MM/yyyy", java.util.Locale.getDefault()),
+                Pair("MM/dd/yyyy", java.util.Locale.getDefault()),
+                Pair("dd-MM-yyyy", java.util.Locale.getDefault()),
+                Pair("yyyy-MM-dd", java.util.Locale.getDefault()),
+                Pair("yyyy/MM/dd", java.util.Locale.getDefault()),
+                Pair("yyyyMMdd", java.util.Locale.getDefault()),
+                Pair("yyyyMMddHHmmss", java.util.Locale.getDefault()),
+                Pair("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", java.util.Locale.getDefault()),
+                Pair("yyyy-MM-dd'T'HH:mm:ss'Z'", java.util.Locale.getDefault()),
+                Pair("yyyy-MM-dd'T'HH:mm:ssXXX", java.util.Locale.getDefault()),
+                Pair("yyyy-MM-dd HH:mm:ss", java.util.Locale.getDefault())
+            )
+            for ((pattern, locale) in formats) {
+                try {
+                    // Try parsing with exact match requirement
+                    val sdf = java.text.SimpleDateFormat(pattern, locale)
+                    sdf.isLenient = false // Prevent incorrect overlap parsing like 06/24/2026 as Dec 2027
+                    val parsed = sdf.parse(tanggalStr)
+                    if (parsed != null) {
+                        date = parsed
+                        break
+                    }
+                } catch (e: Exception) {}
+            }
+
+            if (date == null) {
+                // If all fails, try standard parse
+                try {
+                    date = java.text.DateFormat.getDateInstance().parse(tanggalStr)
+                } catch (e: Exception) {}
+            }
+            
+            if (date == null) {
+                // Try Unix timestamp fallback
+                try {
+                    val timestamp = tanggalStr.toLongOrNull()
+                    if (timestamp != null) {
+                        date = java.util.Date(if (tanggalStr.length <= 10) timestamp * 1000 else timestamp)
+                    }
+                } catch (e: Exception) {}
+            }
+
+            if (date == null) return null
+            
             val cal = java.util.Calendar.getInstance()
             cal.time = date
             cal
@@ -3019,13 +3144,28 @@ fun LabaRugiTabContent(
                     )
                 } else {
                     transactionsByDate.forEachIndexed { index, (tanggal, trxGroup) ->
-                        Text(
-                            text = tanggal,
-                            style = MaterialTheme.typography.titleSmall,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.padding(bottom = 8.dp)
-                        )
+                        val dailyTotalRevenue = trxGroup.values.flatten().sumOf { it.jumlah * it.harga }.toLong()
+                        
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(bottom = 8.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = tanggal,
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                            Text(
+                                text = formatRupiah(dailyTotalRevenue),
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = FontWeight.Bold,
+                                color = SuccessColor
+                            )
+                        }
                 
                         trxGroup.forEach { (trxId, itemsInTrx) ->
                             val totalTrxPrice = itemsInTrx.sumOf { it.jumlah * it.harga }
