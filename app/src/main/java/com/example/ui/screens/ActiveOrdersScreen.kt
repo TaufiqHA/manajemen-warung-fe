@@ -136,8 +136,7 @@ fun ActiveOrdersTabContent(
                     OrderCard(
                         order = order,
                         onMarkReady = {
-                            storageHelper.updateTransactionStatus(order.kodeTransaksi, "READY")
-                            salesViewModel.syncLocalActiveOrders()
+                            salesViewModel.updateActiveOrderStatus(order.kodeTransaksi, "READY")
                         },
                         onProcessPayment = {
                             showPaymentDialog = order
@@ -146,14 +145,13 @@ fun ActiveOrdersTabContent(
                             salesViewModel.updateItemServedQty(order.kodeTransaksi, itemId, newQty)
                             
                             // Check if all items are fully served
-                            val updatedTx = storageHelper.getNestedTransactions().find { it.kodeTransaksi == order.kodeTransaksi }
-                            if (updatedTx != null) {
-                                val allServed = updatedTx.items.all { it.servedQty >= it.qty }
-                                if (allServed && updatedTx.status == "PENDING") {
-                                    salesViewModel.updateActiveOrderStatus(updatedTx.kodeTransaksi, "READY")
-                                } else if (!allServed && updatedTx.status == "READY") {
-                                    salesViewModel.updateActiveOrderStatus(updatedTx.kodeTransaksi, "PENDING")
-                                }
+                            val allServed = order.items.all {
+                                if (it.itemId == itemId) newQty >= it.qty else it.servedQty >= it.qty
+                            }
+                            if (allServed && order.status == "PENDING") {
+                                salesViewModel.updateActiveOrderStatus(order.kodeTransaksi, "READY")
+                            } else if (!allServed && order.status == "READY") {
+                                salesViewModel.updateActiveOrderStatus(order.kodeTransaksi, "PENDING")
                             }
                         },
                         onPrintDapur = {
@@ -200,9 +198,9 @@ fun ActiveOrdersTabContent(
             },
             confirmButton = {
                 Button(onClick = {
-                    storageHelper.updateItemQuantity(transaction.kodeTransaksi, item.itemId, editQuantity)
-                    salesViewModel.syncLocalActiveOrders()
-                    itemToEdit = null
+                    salesViewModel.updateItemQuantityInActiveOrder(transaction.kodeTransaksi, item.itemId, editQuantity, item.harga.toDouble()) {
+                        itemToEdit = null
+                    }
                 }) {
                     Text("Simpan")
                 }

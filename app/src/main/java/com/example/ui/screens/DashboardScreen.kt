@@ -153,7 +153,8 @@ data class TransaksiHarian(
     @com.squareup.moshi.Json(name = "metodePembayaran") val metodePembayaranRaw: String? = null,
     val orderStatus: String? = null,
     @com.squareup.moshi.Json(name = "customer_name") val customerName: String? = null,
-    @com.squareup.moshi.Json(name = "customerName") val customerNameFallback: String? = null
+    @com.squareup.moshi.Json(name = "customerName") val customerNameFallback: String? = null,
+    @com.squareup.moshi.Json(name = "servedQty") val servedQty: Int = 0
 
 ) {
     val metodePembayaran: String?

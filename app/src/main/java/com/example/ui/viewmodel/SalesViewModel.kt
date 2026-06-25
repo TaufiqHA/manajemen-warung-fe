@@ -40,11 +40,11 @@ class SalesViewModel(application: Application) : AndroidViewModel(application) {
     val activeOrders = _activeOrders.asStateFlow()
 
     fun loadActiveOrders() {
-        // Bypass local storage
+        fetchActiveOrders()
     }
 
     fun syncLocalActiveOrders() {
-        // Bypass local storage
+        fetchActiveOrders()
     }
 
     fun fetchActiveOrders() {
@@ -77,16 +77,14 @@ class SalesViewModel(application: Application) : AndroidViewModel(application) {
                             }
                         }
                         
-                        val localTx = storageHelper.getNestedTransactions().find { it.kodeTransaksi == idTx }
                         val transactionItems = items.map {
-                            val localServedQty = localTx?.items?.find { localItem -> localItem.itemId == it.id }?.servedQty ?: 0
                             com.example.data.TransactionItem(
                                 itemId = it.id,
                                 namaBarang = it.namaItem,
                                 qty = it.jumlah,
                                 harga = it.harga.toLong(),
                                 subTotal = (it.jumlah * it.harga).toLong(),
-                                servedQty = localServedQty
+                                servedQty = it.servedQty
                             )
                         }
                         val total = transactionItems.sumOf { it.subTotal }
@@ -119,7 +117,6 @@ class SalesViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun updateItemServedQty(kodeTransaksi: String, itemId: String, newServedQty: Int) {
-        storageHelper.updateItemServedQty(kodeTransaksi, itemId, newServedQty)
         
         val currentList = _activeOrders.value.toMutableList()
         val index = currentList.indexOfFirst { it.kodeTransaksi == kodeTransaksi }
@@ -130,6 +127,13 @@ class SalesViewModel(application: Application) : AndroidViewModel(application) {
             }
             currentList[index] = order.copy(items = newItems)
             _activeOrders.value = currentList
+        }
+
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                com.example.data.api.RetrofitClient.getTransactionApiService(getApplication())
+                    .updateServedQty(kodeTransaksi, itemId, mapOf("served_qty" to newServedQty))
+            } catch (e: Exception) {}
         }
     }
 
@@ -214,6 +218,26 @@ class SalesViewModel(application: Application) : AndroidViewModel(application) {
                     onError("Terjadi kesalahan koneksi: ${e.message}")
                 }
             }
+        }
+    }
+
+    fun updateItemQuantityInActiveOrder(
+        kodeTransaksi: String,
+        itemId: String,
+        newQty: Int,
+        unitPrice: Double,
+        onSuccess: () -> Unit = {}
+    ) {
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                val subtotal = newQty * unitPrice
+                val response = com.example.data.api.RetrofitClient.getTransactionApiService(getApplication())
+                    .updateTransactionItem(kodeTransaksi, itemId, com.example.data.UpdateTransactionItemRequest(newQty, subtotal))
+                if (response.isSuccessful) {
+                    fetchActiveOrders()
+                    launch(Dispatchers.Main) { onSuccess() }
+                }
+            } catch (e: Exception) {}
         }
     }
 
