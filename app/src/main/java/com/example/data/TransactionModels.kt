@@ -64,7 +64,8 @@ data class UpdateWarungRequest(
 
 data class UpdateStatusRequest(
     val status: String,
-    val payment_method: String? = null
+    val payment_method: String? = null,
+    @com.squareup.moshi.Json(name = "discount_amount") val discountAmount: Long? = null
 )
 
 data class AddTransactionItemRequest(

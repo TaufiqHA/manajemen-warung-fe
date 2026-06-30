@@ -254,11 +254,13 @@ class LocalStorageHelper(private val context: Context) {
         @kotlin.OptIn(kotlinx.coroutines.DelicateCoroutinesApi::class)
         kotlinx.coroutines.GlobalScope.launch(kotlinx.coroutines.Dispatchers.IO) {
             try {
+                val discountAmount = getNestedTransactions().find { it.kodeTransaksi == kodeTransaksi }?.diskonNominal
                 com.example.data.api.RetrofitClient.getTransactionApiService(context).updateTransactionStatus(
                     transactionId = kodeTransaksi,
                     request = com.example.data.UpdateStatusRequest(
                         status = newStatus,
-                        payment_method = currentPaymentMethod
+                        payment_method = currentPaymentMethod,
+                        discountAmount = discountAmount
                     )
                 )
                 removeUnsyncedStatusUpdate(kodeTransaksi)
@@ -508,14 +510,17 @@ class LocalStorageHelper(private val context: Context) {
             }
             
             val flatList = getTransaksiList()
+            val nestedList = getNestedTransactions()
             for (statusUpdate in unsyncedStatus) {
                 try {
                     val currentPaymentMethod = flatList.find { it.idTransaksi == statusUpdate.transactionId }?.metodePembayaran
+                    val discountAmount = nestedList.find { it.kodeTransaksi == statusUpdate.transactionId }?.diskonNominal
                     apiService.updateTransactionStatus(
                         transactionId = statusUpdate.transactionId,
                         request = com.example.data.UpdateStatusRequest(
                             status = statusUpdate.status,
-                            payment_method = currentPaymentMethod
+                            payment_method = currentPaymentMethod,
+                            discountAmount = discountAmount
                         )
                     )
                     removeUnsyncedStatusUpdate(statusUpdate.transactionId)

@@ -141,6 +141,7 @@ class SalesViewModel(application: Application) : AndroidViewModel(application) {
         kodeTransaksi: String, 
         newStatus: String, 
         paymentMethod: String? = null,
+        discountAmount: Long? = null,
         onSuccess: () -> Unit = {}, 
         onError: (String) -> Unit = {}
     ) {
@@ -150,7 +151,7 @@ class SalesViewModel(application: Application) : AndroidViewModel(application) {
                 val response = com.example.data.api.RetrofitClient.getTransactionApiService(getApplication())
                     .updateTransactionStatus(
                         kodeTransaksi, 
-                        com.example.data.UpdateStatusRequest(newStatus, validPaymentMethod)
+                        com.example.data.UpdateStatusRequest(newStatus, validPaymentMethod, discountAmount)
                     )
                 if (response.isSuccessful) {
                     fetchActiveOrders()

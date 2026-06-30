@@ -21,6 +21,7 @@ import androidx.compose.ui.unit.sp
 import com.example.data.Transaction
 import com.example.ui.components.AppIcons
 import com.example.ui.theme.SuccessColor
+import com.example.ui.theme.DangerColor
 import com.example.utils.LocalStorageHelper
 import com.example.utils.formatRupiah
 import java.text.SimpleDateFormat
@@ -553,6 +554,7 @@ fun ActiveOrdersTabContent(
         val transaction = showPaymentDialog!!
         var discountInput by remember { mutableStateOf("") }
         var isDiscountPercent by remember { mutableStateOf(false) }
+        var discountError by remember { mutableStateOf<String?>(null) }
 
         val discountAmount = discountInput.toLongOrNull() ?: 0L
         val diskonNominal = if (isDiscountPercent) {
@@ -562,6 +564,15 @@ fun ActiveOrdersTabContent(
         }
         val totalAfterDiscount = (transaction.totalHarga - diskonNominal).coerceAtLeast(0L)
 
+        LaunchedEffect(discountAmount, isDiscountPercent, transaction.totalHarga) {
+            discountError = when {
+                discountAmount < 0 -> "Diskon tidak boleh negatif"
+                isDiscountPercent && discountAmount > 100 -> "Diskon persen maksimal 100%"
+                !isDiscountPercent && diskonNominal > transaction.totalHarga -> "Diskon melebihi total harga"
+                else -> null
+            }
+        }
+
         AlertDialog(
             onDismissRequest = { showPaymentDialog = null },
             title = { Text("Pilih Metode Pembayaran") },
@@ -570,23 +581,39 @@ fun ActiveOrdersTabContent(
                     Text("Total Pesanan: ${formatRupiah(transaction.totalHarga)}", color = Color.Gray)
                     Spacer(modifier = Modifier.height(8.dp))
                     
-                    OutlinedTextField(
-                        value = discountInput,
-                        onValueChange = { discountInput = it },
-                        label = { Text(if (isDiscountPercent) "Diskon (%)" else "Diskon (Rp)") },
-                        keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = androidx.compose.ui.text.input.KeyboardType.Number),
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                    
                     Row(
-                        verticalAlignment = Alignment.CenterVertically,
                         modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.End
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        Text("Persen (%)")
-                        Switch(
-                            checked = isDiscountPercent,
-                            onCheckedChange = { isDiscountPercent = it }
+                        OutlinedTextField(
+                            value = discountInput,
+                            onValueChange = { discountInput = it },
+                            label = { Text(if (isDiscountPercent) "Diskon (%)" else "Diskon (Rp)") },
+                            modifier = Modifier.weight(1f),
+                            keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = androidx.compose.ui.text.input.KeyboardType.Number),
+                            isError = discountError != null,
+                            singleLine = true
+                        )
+                        
+                        FilterChip(
+                            selected = isDiscountPercent,
+                            onClick = { isDiscountPercent = true },
+                            label = { Text("%") }
+                        )
+                        FilterChip(
+                            selected = !isDiscountPercent,
+                            onClick = { isDiscountPercent = false },
+                            label = { Text("Rp") }
+                        )
+                    }
+
+                    if (discountError != null) {
+                        Text(
+                            text = discountError ?: "",
+                            color = DangerColor,
+                            style = MaterialTheme.typography.labelSmall,
+                            modifier = Modifier.padding(top = 4.dp)
                         )
                     }
 
@@ -614,7 +641,7 @@ fun ActiveOrdersTabContent(
                 var isPaying by remember { mutableStateOf(false) }
                 Button(
                     onClick = {
-                        if (isPaying) return@Button
+                        if (isPaying || discountError != null) return@Button
                         isPaying = true
                         
                         // Local discount update for receipt
@@ -629,6 +656,7 @@ fun ActiveOrdersTabContent(
                             kodeTransaksi = transaction.kodeTransaksi,
                             newStatus = "COMPLETED",
                             paymentMethod = selectedPaymentMethod,
+                            discountAmount = diskonNominal,
                             onSuccess = {
                                 isPaying = false
                                 showPaymentDialog = null
@@ -646,7 +674,7 @@ fun ActiveOrdersTabContent(
                             }
                         )
                     },
-                    enabled = !isPaying
+                    enabled = !isPaying && discountError == null
                 ) {
                     Text(if (isPaying) "Memproses..." else "Konfirmasi Bayar")
                 }

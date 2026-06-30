@@ -1265,6 +1265,11 @@ fun PenjualanTabContent(
                                                                     style = MaterialTheme.typography.labelMedium,
                                                                     color = Color.Gray
                                                                 )
+                                                                Text(
+                                                                    text = "via : ${detail.metodePembayaran ?: "BELUM LUNAS"}",
+                                                                    style = MaterialTheme.typography.labelMedium,
+                                                                    color = Color.Gray
+                                                                )
                                                                 val fallbackPayment = detail.metodePembayaran ?: "BELUM LUNAS"
                                                                 val displayCatatan = if (detail.catatan.contains("belum lunas", ignoreCase = true)) {
                                                                     detail.catatan.replace(Regex("(?i)(via\\s*:\\s*)?belum lunas"), "Via: $fallbackPayment").trim()

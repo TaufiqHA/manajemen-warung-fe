@@ -54,34 +54,13 @@ fun SalesScreen(
 
     var qty by remember { mutableStateOf("1") }
     var harga by remember { mutableStateOf("") }
-    var diskonItem by remember { mutableStateOf("") }
     
     var showReceiptDialog by remember { mutableStateOf(false) }
     var receiptText by remember { mutableStateOf("") }
     var currentTransaction by remember { mutableStateOf<Transaction?>(null) }
     var customerName by remember { mutableStateOf("") }
 
-    var isDiscountPercent by remember { mutableStateOf(true) } // true = %, false = Rp
-    var discountInput by remember { mutableStateOf("") }
-    var discountError by remember { mutableStateOf<String?>(null) }
-
     val subtotal = viewModel.totalHarga
-    val discountValue = discountInput.toDoubleOrNull() ?: 0.0
-    val nominalDiskon = if (isDiscountPercent) {
-        (subtotal * (discountValue / 100.0)).toLong()
-    } else {
-        discountValue.toLong()
-    }
-    val totalAkhir = (subtotal - nominalDiskon).coerceAtLeast(0L)
-
-    LaunchedEffect(discountValue, isDiscountPercent, subtotal) {
-        discountError = when {
-            discountValue < 0.0 -> "Diskon tidak boleh negatif"
-            isDiscountPercent && discountValue > 100.0 -> "Diskon persen maksimal 100%"
-            !isDiscountPercent && nominalDiskon > subtotal -> "Diskon melebihi total harga"
-            else -> null
-        }
-    }
 
     val sharedPrefs = remember { context.getSharedPreferences("printer_prefs", Context.MODE_PRIVATE) }
     val bluetoothAdapter = remember { BluetoothAdapter.getDefaultAdapter() }
@@ -192,47 +171,18 @@ fun SalesScreen(
                             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                             modifier = Modifier.weight(1f)
                         )
-                        
-                        val itemPrice = harga.toLongOrNull() ?: 0L
-                        val itemDiscountPercent = diskonItem.toDoubleOrNull() ?: 0.0
-                        val itemDiscountNominal = (itemPrice * (itemDiscountPercent / 100.0)).toLong()
-
-                        Row(
-                            modifier = Modifier.weight(1.5f),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(4.dp)
-                        ) {
-                            OutlinedTextField(
-                                value = diskonItem,
-                                onValueChange = { diskonItem = it },
-                                label = { Text("Diskon (%)") },
-                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                                modifier = Modifier.weight(1f)
-                            )
-                            if (itemDiscountNominal > 0) {
-                                Text(
-                                    text = formatRupiah(itemDiscountNominal),
-                                    style = MaterialTheme.typography.bodySmall,
-                                    fontWeight = FontWeight.Bold,
-                                    color = MaterialTheme.colorScheme.primary
-                                )
-                            }
-                        }
                     }
                     
                     Button(
                         onClick = {
                             val q = qty.toIntOrNull() ?: 0
                             val h = harga.toLongOrNull() ?: 0L
-                            val itemDiscountPercent = diskonItem.toDoubleOrNull() ?: 0.0
-                            val d = (h * (itemDiscountPercent / 100.0)).toLong()
                             if (searchQuery.isNotBlank() && q > 0 && h > 0) {
-                                viewModel.addToCart(searchQuery, q, h, d)
+                                viewModel.addToCart(searchQuery, q, h)
                                 // Reset fields
                                 viewModel.onSearchQueryChanged("")
                                 qty = "1"
                                 harga = ""
-                                diskonItem = ""
                             }
                         },
                         modifier = Modifier.fillMaxWidth()
@@ -277,80 +227,18 @@ fun SalesScreen(
                 }
             }
             
-            Spacer(modifier = Modifier.height(16.dp))
-
-            // --- Input Diskon ---
-            if (viewModel.cartItems.isNotEmpty()) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    OutlinedTextField(
-                        value = discountInput,
-                        onValueChange = { discountInput = it },
-                        label = { Text(if (isDiscountPercent) "Diskon (%)" else "Diskon (Rp)") },
-                        modifier = Modifier.weight(1f),
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                        isError = discountError != null,
-                        singleLine = true
-                    )
-                    
-                    FilterChip(
-                        selected = isDiscountPercent,
-                        onClick = { isDiscountPercent = true },
-                        label = { Text("%") }
-                    )
-                    FilterChip(
-                        selected = !isDiscountPercent,
-                        onClick = { isDiscountPercent = false },
-                        label = { Text("Rp") }
-                    )
-                }
-                
-                if (discountError != null) {
-                    Text(
-                        text = discountError ?: "",
-                        color = DangerColor,
-                        style = MaterialTheme.typography.labelSmall,
-                        modifier = Modifier.padding(top = 4.dp)
-                    )
-                }
-                
-                Spacer(modifier = Modifier.height(12.dp))
-            }
-            
             // C. Bagian Bawah: Ringkasan & Aksi
             Divider()
             Spacer(modifier = Modifier.height(8.dp))
             
-            if (nominalDiskon > 0 && discountError == null) {
-                Row(
-                    modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    Text("Subtotal", style = MaterialTheme.typography.bodyMedium, color = Color.Gray)
-                    Text(formatRupiah(subtotal), style = MaterialTheme.typography.bodyMedium)
-                }
-                Row(
-                    modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    val discLabel = if (isDiscountPercent) "Diskon (${discountValue.toLong()}%)" else "Diskon"
-                    Text(discLabel, style = MaterialTheme.typography.bodyMedium, color = Color.Gray)
-                    Text("-${formatRupiah(nominalDiskon)}", style = MaterialTheme.typography.bodyMedium, color = DangerColor)
-                }
-                Spacer(modifier = Modifier.height(4.dp))
-            }
-
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Text(if (nominalDiskon > 0 && discountError == null) "Total Akhir" else "Total Harga", style = MaterialTheme.typography.titleMedium)
+                Text("Total Harga", style = MaterialTheme.typography.titleMedium)
                 Text(
-                    formatRupiah(totalAkhir),
+                    formatRupiah(subtotal),
                     style = MaterialTheme.typography.headlineSmall,
                     fontWeight = FontWeight.Bold,
                     color = SuccessColor
@@ -362,12 +250,9 @@ fun SalesScreen(
             
             Button(
                 onClick = {
-                    if (viewModel.cartItems.isNotEmpty() && discountError == null && customerName.isNotBlank()) {
+                    if (viewModel.cartItems.isNotEmpty() && customerName.isNotBlank()) {
                         val transaction = viewModel.processTransaction(
                             customerName = customerName,
-                            diskonPersen = if (isDiscountPercent) discountValue else 0.0,
-                            diskonNominal = nominalDiskon,
-                            totalSetelahDiskon = totalAkhir,
                             paymentMethod = "BELUM LUNAS"
                         )
                         currentTransaction = transaction
@@ -378,7 +263,7 @@ fun SalesScreen(
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(56.dp),
-                enabled = viewModel.cartItems.isNotEmpty() && discountError == null && customerName.isNotBlank(),
+                enabled = viewModel.cartItems.isNotEmpty() && customerName.isNotBlank(),
                 shape = RoundedCornerShape(12.dp)
             ) {
                 Icon(AppIcons.Print, contentDescription = null)
@@ -393,7 +278,6 @@ fun SalesScreen(
             onDismissRequest = { 
                 showReceiptDialog = false
                 viewModel.clearCart()
-                discountInput = ""
                 customerName = ""
             },
             title = { Text("Struk Dapur") },
@@ -500,7 +384,6 @@ fun SalesScreen(
                 Button(onClick = { 
                     showReceiptDialog = false 
                     viewModel.clearCart()
-                    discountInput = ""
                     customerName = ""
                 }) {
                     Text("Selesai")
