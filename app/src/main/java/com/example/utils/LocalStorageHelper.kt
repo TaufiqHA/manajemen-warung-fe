@@ -460,7 +460,8 @@ class LocalStorageHelper(private val context: Context) {
                 customerName = transaction.customerName,
                 orderStatus = transaction.status,
                 status = transaction.status,
-                items = apiItems
+                items = apiItems,
+                discountAmount = transaction.diskonNominal
             )
             
             try {

@@ -1734,6 +1734,31 @@ fun PenjualanTabContent(
                                 Text(displayItemCatatan, style = MaterialTheme.typography.bodyMedium)
                             }
                         }
+
+                        // Menampilkan Diskon dan Total Akhir Transaksi jika ada
+                        val parentTransaction = storageHelper.getNestedTransactions().find { it.kodeTransaksi == item.idTransaksi }
+                        if (parentTransaction != null && parentTransaction.diskonNominal > 0) {
+                            Divider(modifier = Modifier.padding(vertical = 4.dp))
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                val discLabel = if (parentTransaction.diskonPersen > 0) {
+                                    "Diskon Transaksi (${parentTransaction.diskonPersen.toLong()}%)"
+                                } else {
+                                    "Diskon Transaksi"
+                                }
+                                Text(discLabel, style = MaterialTheme.typography.bodyMedium, color = Color.Gray)
+                                Text("-${formatRupiah(parentTransaction.diskonNominal)}", style = MaterialTheme.typography.bodyMedium, color = DangerColor)
+                            }
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Text("Total Akhir Transaksi", style = MaterialTheme.typography.bodyMedium, color = Color.Gray)
+                                Text(formatRupiah(parentTransaction.totalSetelahDiskon), style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold, color = SuccessColor)
+                            }
+                        }
                     }
                 },
                 confirmButton = {

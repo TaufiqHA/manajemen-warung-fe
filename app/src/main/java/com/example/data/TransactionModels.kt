@@ -35,7 +35,8 @@ data class TransactionRequest(
     val customerName: String? = null,
     val orderStatus: String? = null, // PENDING, READY, COMPLETED
     val status: String? = null, // Tambahan untuk kompatibilitas
-    val items: List<TransactionItemRequest>
+    val items: List<TransactionItemRequest>,
+    @com.squareup.moshi.Json(name = "discount_amount") val discountAmount: Long? = null
 )
 
 data class TransactionItemRequest(

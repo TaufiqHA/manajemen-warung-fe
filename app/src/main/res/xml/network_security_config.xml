@@ -2,7 +2,7 @@
 <network-security-config>
     <domain-config cleartextTrafficPermitted="true">
         <!-- Tambahkan IP server API backend di sini -->
-        <domain includeSubdomains="true">10.122.235.207</domain>
+        <domain includeSubdomains="true">10.166.179.40</domain>
         <domain includeSubdomains="true">103.30.146.68</domain>
         <!-- Anda bisa menambahkan localhost juga jika diperlukan -->
         <domain includeSubdomains="true">10.0.2.2</domain>
