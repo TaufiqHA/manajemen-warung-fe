@@ -861,7 +861,7 @@ fun BerandaTabContent(
         Spacer(modifier = Modifier.height(32.dp))
         
         // Active Orders (Open Bill) directly in Beranda
-        if (role == "Admin Toko") {
+        if (role == "Admin Toko" || role == "Owner") {
             Text(
                 text = "ORDERAN AKTIF (OPEN BILL)",
                 style = MaterialTheme.typography.titleSmall,
@@ -870,7 +870,8 @@ fun BerandaTabContent(
             Spacer(modifier = Modifier.height(12.dp))
             ActiveOrdersTabContent(
                 menuList = menuList,
-                modifier = Modifier.fillMaxWidth().heightIn(min = 200.dp, max = 500.dp) // Wrap in a constrained box to fit inside scrollview
+                modifier = Modifier.fillMaxWidth().heightIn(min = 200.dp, max = 500.dp), // Wrap in a constrained box to fit inside scrollview
+                isReadOnly = (role == "Owner")
             )
             Spacer(modifier = Modifier.height(48.dp))
         }

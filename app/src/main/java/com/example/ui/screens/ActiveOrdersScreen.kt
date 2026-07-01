@@ -43,7 +43,8 @@ import com.example.utils.generateQuotationPdf
 @Composable
 fun ActiveOrdersTabContent(
     modifier: Modifier = Modifier,
-    menuList: List<MenuItem> = emptyList()
+    menuList: List<MenuItem> = emptyList(),
+    isReadOnly: Boolean = false
 ) {
     val context = LocalContext.current
     val storageHelper = remember { LocalStorageHelper(context) }
@@ -136,6 +137,7 @@ fun ActiveOrdersTabContent(
                 items(activeOrders) { order ->
                     OrderCard(
                         order = order,
+                        isReadOnly = isReadOnly,
                         onMarkReady = {
                             salesViewModel.updateActiveOrderStatus(order.kodeTransaksi, "READY")
                         },
@@ -691,6 +693,7 @@ fun ActiveOrdersTabContent(
 @Composable
 fun OrderCard(
     order: Transaction,
+    isReadOnly: Boolean = false,
     onMarkReady: () -> Unit,
     onProcessPayment: () -> Unit,
     onUpdateItemServedQty: (String, Int) -> Unit,
@@ -778,18 +781,20 @@ fun OrderCard(
                             text = "${item.qty}x ${item.namaBarang}",
                             modifier = Modifier.weight(1f) // flex-1, break-words
                         )
-                        IconButton(
-                            onClick = { onEditItemClick(item) },
-                            modifier = Modifier
-                                .padding(start = 8.dp) // ml-2
-                                .size(24.dp) // shrink-0
-                        ) {
-                            Icon(
-                                imageVector = AppIcons.Edit,
-                                contentDescription = "Edit Item",
-                                modifier = Modifier.size(16.dp),
-                                tint = Color.Gray
-                            )
+                        if (!isReadOnly) {
+                            IconButton(
+                                onClick = { onEditItemClick(item) },
+                                modifier = Modifier
+                                    .padding(start = 8.dp) // ml-2
+                                    .size(24.dp) // shrink-0
+                            ) {
+                                Icon(
+                                    imageVector = AppIcons.Edit,
+                                    contentDescription = "Edit Item",
+                                    modifier = Modifier.size(16.dp),
+                                    tint = Color.Gray
+                                )
+                            }
                         }
                     }
                     Surface(
@@ -797,34 +802,38 @@ fun OrderCard(
                         shape = RoundedCornerShape(16.dp)
                     ) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            IconButton(
-                                onClick = { if (item.servedQty > 0) onUpdateItemServedQty(item.itemId, item.servedQty - 1) },
-                                modifier = Modifier.size(32.dp)
-                            ) {
-                                Icon(
-                                    imageVector = AppIcons.Remove, 
-                                    contentDescription = "Kurang", 
-                                    modifier = Modifier.size(16.dp),
-                                    tint = if (item.servedQty > 0) MaterialTheme.colorScheme.onSurface else Color.LightGray
-                                )
+                            if (!isReadOnly) {
+                                IconButton(
+                                    onClick = { if (item.servedQty > 0) onUpdateItemServedQty(item.itemId, item.servedQty - 1) },
+                                    modifier = Modifier.size(32.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = AppIcons.Remove, 
+                                        contentDescription = "Kurang", 
+                                        modifier = Modifier.size(16.dp),
+                                        tint = if (item.servedQty > 0) MaterialTheme.colorScheme.onSurface else Color.LightGray
+                                    )
+                                }
                             }
                             Text(
                                 text = "${item.servedQty} / ${item.qty}",
-                                modifier = Modifier.padding(horizontal = 4.dp),
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
                                 fontSize = 12.sp,
                                 fontWeight = FontWeight.Medium,
                                 color = if (item.servedQty == item.qty) SuccessColor else MaterialTheme.colorScheme.onSurface
                             )
-                            IconButton(
-                                onClick = { if (item.servedQty < item.qty) onUpdateItemServedQty(item.itemId, item.servedQty + 1) },
-                                modifier = Modifier.size(32.dp)
-                            ) {
-                                Icon(
-                                    imageVector = AppIcons.Add, 
-                                    contentDescription = "Tambah", 
-                                    modifier = Modifier.size(16.dp),
-                                    tint = if (item.servedQty < item.qty) MaterialTheme.colorScheme.onSurface else Color.LightGray
-                                )
+                            if (!isReadOnly) {
+                                IconButton(
+                                    onClick = { if (item.servedQty < item.qty) onUpdateItemServedQty(item.itemId, item.servedQty + 1) },
+                                    modifier = Modifier.size(32.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = AppIcons.Add, 
+                                        contentDescription = "Tambah", 
+                                        modifier = Modifier.size(16.dp),
+                                        tint = if (item.servedQty < item.qty) MaterialTheme.colorScheme.onSurface else Color.LightGray
+                                    )
+                                }
                             }
                         }
                     }
@@ -844,24 +853,26 @@ fun OrderCard(
                 
                 Spacer(modifier = Modifier.height(8.dp))
                 
-                @OptIn(ExperimentalLayoutApi::class)
-                FlowRow(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.End,
-                ) {
-                    TextButton(onClick = onPrintDapur) {
-                        Text("Print Dapur")
-                    }
-                    TextButton(onClick = onAddItemsClick, modifier = Modifier.padding(horizontal = 4.dp)) {
-                        Text("+ Item")
-                    }
-                    if (!isReady) {
-                        OutlinedButton(onClick = onMarkReady) {
-                            Text("Selesai")
+                if (!isReadOnly) {
+                    @OptIn(ExperimentalLayoutApi::class)
+                    FlowRow(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.End,
+                    ) {
+                        TextButton(onClick = onPrintDapur) {
+                            Text("Print Dapur")
                         }
-                    } else {
-                        Button(onClick = onProcessPayment) {
-                            Text("Bayar & Cetak")
+                        TextButton(onClick = onAddItemsClick, modifier = Modifier.padding(horizontal = 4.dp)) {
+                            Text("+ Item")
+                        }
+                        if (!isReady) {
+                            OutlinedButton(onClick = onMarkReady) {
+                                Text("Selesai")
+                            }
+                        } else {
+                            Button(onClick = onProcessPayment) {
+                                Text("Bayar & Cetak")
+                            }
                         }
                     }
                 }
