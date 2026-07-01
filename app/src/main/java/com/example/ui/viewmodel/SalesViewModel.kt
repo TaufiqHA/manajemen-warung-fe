@@ -309,8 +309,9 @@ class SalesViewModel(application: Application) : AndroidViewModel(application) {
     val isDropdownExpanded = _isDropdownExpanded.asStateFlow()
 
     val filteredItems = combine(_allItems, _searchQuery) { items, query ->
-        if (query.isBlank()) {
-            items
+        // Jika user belum mengetik minimal 2 huruf, jangan tampilkan apa-apa
+        if (query.length < 2) {
+            emptyList()
         } else {
             items.filter { it.name.contains(query, ignoreCase = true) }
         }

@@ -4,10 +4,12 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExposedDropdownMenuBox
@@ -19,8 +21,10 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.PopupProperties
 import com.example.data.Item
 import com.example.ui.theme.DangerColor
 
@@ -37,12 +41,23 @@ fun AutocompleteItemDropdown(
 ) {
     ExposedDropdownMenuBox(
         expanded = isExpanded,
-        onExpandedChange = { onExpandedChanged(it) },
+        onExpandedChange = { 
+            // Hanya buka menu jika teks sudah >= 2 karakter
+            if (query.length >= 2) {
+                onExpandedChanged(it)
+            } else {
+                onExpandedChanged(false)
+            }
+        },
         modifier = modifier
     ) {
         OutlinedTextField(
             value = query,
-            onValueChange = { onQueryChanged(it) },
+            onValueChange = { 
+                onQueryChanged(it)
+                // Buka menu otomatis jika sudah ketik >= 2 huruf
+                onExpandedChanged(it.length >= 2)
+            },
             readOnly = false,
             singleLine = true,
             label = { Text("Nama Barang") },
@@ -52,9 +67,13 @@ fun AutocompleteItemDropdown(
         )
 
         if (filteredItems.isNotEmpty()) {
-            ExposedDropdownMenu(
+            DropdownMenu(
                 expanded = isExpanded,
-                onDismissRequest = { onExpandedChanged(false) }
+                onDismissRequest = { onExpandedChanged(false) },
+                properties = PopupProperties(focusable = false), // Ini mencegah hilangnya fokus
+                modifier = Modifier
+                    .exposedDropdownSize() // Ini menjaga lebar menu tetap sama
+                    .heightIn(max = 250.dp)
             ) {
                 filteredItems.forEach { item ->
                     DropdownMenuItem(
