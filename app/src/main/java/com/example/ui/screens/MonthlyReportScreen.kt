@@ -29,6 +29,7 @@ fun MonthlyReportScreen(
 
     var monthExpanded by remember { mutableStateOf(false) }
     var itemExpanded by remember { mutableStateOf(false) }
+    var showRincian by remember(selectedMonth, selectedItemId) { mutableStateOf(false) }
 
     val monthNames = DateFormatSymbols().months
 
@@ -126,9 +127,6 @@ fun MonthlyReportScreen(
 
             Spacer(modifier = Modifier.height(24.dp))
             
-            Text("Rincian Harian", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-            Spacer(modifier = Modifier.height(8.dp))
-
             // --- Bagian Bawah: Hasil Laporan ---
             if (selectedItemId == null) {
                 Box(modifier = Modifier.fillMaxSize(), contentAlignment = androidx.compose.ui.Alignment.Center) {
@@ -139,14 +137,80 @@ fun MonthlyReportScreen(
                     Text("Tidak ada data penjualan untuk item ini di bulan ${monthNames[selectedMonth - 1]}.", color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             } else {
-                LazyColumn(
-                    modifier = Modifier.fillMaxSize(),
-                    verticalArrangement = Arrangement.spacedBy(8.dp),
-                    contentPadding = PaddingValues(bottom = 16.dp)
+                val totalQty = remember(reportData) { reportData.sumOf { it.qty } }
+                val totalAmount = remember(reportData) { reportData.sumOf { it.totalAmount } }
+
+                Text("Ringkasan Penjualan", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                Spacer(modifier = Modifier.height(8.dp))
+
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    elevation = CardDefaults.cardElevation(2.dp),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
                 ) {
-                    items(reportData) { data ->
-                        ReportRowItem(data)
+                    Column(modifier = Modifier.padding(16.dp)) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Text("Total Penjualan", style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium)
+                            Text(
+                                text = "$totalQty Item",
+                                style = MaterialTheme.typography.bodyLarge,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                        }
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Text("Total Pendapatan", style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium)
+                            Text(
+                                text = formatRupiah(totalAmount.toLong()),
+                                style = MaterialTheme.typography.bodyLarge,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                        }
+                        Spacer(modifier = Modifier.height(16.dp))
+                        Button(
+                            onClick = { showRincian = true },
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Icon(AppIcons.List, contentDescription = null, modifier = Modifier.size(18.dp))
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text("Lihat Rincian")
+                        }
                     }
+                }
+
+                if (showRincian) {
+                    val selectedItemName = allItems.find { it.id == selectedItemId }?.name ?: "Item"
+                    AlertDialog(
+                        onDismissRequest = { showRincian = false },
+                        title = {
+                            Text("Rincian Penjualan: $selectedItemName", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                        },
+                        text = {
+                            Box(modifier = Modifier.heightIn(max = 400.dp)) {
+                                LazyColumn(
+                                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                                    contentPadding = PaddingValues(vertical = 8.dp)
+                                ) {
+                                    items(reportData) { data ->
+                                        ReportRowItem(data)
+                                    }
+                                }
+                            }
+                        },
+                        confirmButton = {
+                            Button(onClick = { showRincian = false }) {
+                                Text("Tutup")
+                            }
+                        }
+                    )
                 }
             }
         }
@@ -163,9 +227,14 @@ fun ReportRowItem(data: DailyItemReport) {
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(16.dp),
-            horizontalArrangement = Arrangement.SpaceBetween
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = androidx.compose.ui.Alignment.CenterVertically
         ) {
-            Text(text = "Tanggal ${data.date}", fontWeight = FontWeight.Bold)
+            Column {
+                Text(text = "Tanggal ${data.date}", fontWeight = FontWeight.Bold)
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(text = "${data.qty} Item terjual", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
             Text(text = formatRupiah(data.totalAmount.toLong()), color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.SemiBold)
         }
     }

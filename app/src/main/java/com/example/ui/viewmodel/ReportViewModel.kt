@@ -145,27 +145,28 @@ class ReportViewModel(application: Application) : AndroidViewModel(application) 
         val calendar = Calendar.getInstance()
 
         // 1. Ambil semua item dari transaksi yang sesuai bulan dan itemId
-        val dayAndAmountList = transactions.flatMap { tx ->
+        val dayAndDataList = transactions.flatMap { tx ->
             calendar.timeInMillis = tx.tanggalTransaksi
             val txMonth = calendar.get(Calendar.MONTH) + 1
             
             if (txMonth == month) {
                 tx.items.filter { it.itemId == itemId && !it.namaBarang.contains("[BATAL]", ignoreCase = true) }.map {
-                    calendar.get(Calendar.DAY_OF_MONTH) to it.subTotal.toDouble()
+                    calendar.get(Calendar.DAY_OF_MONTH) to (it.subTotal.toDouble() to it.qty)
                 }
             } else {
                 emptyList()
             }
         }
 
-        // 2. Grouping berdasarkan tanggal (Day of Month) dan jumlahkan
-        val grouped = dayAndAmountList.groupBy({ it.first }, { it.second })
+        // 2. Grouping berdasarkan tanggal (Day of Month)
+        val grouped = dayAndDataList.groupBy({ it.first }, { it.second })
 
         // 3. Ubah map hasil grouping menjadi list DailyItemReport dan urutkan berdasarkan tanggal
-        grouped.map { (day, amounts) ->
+        grouped.map { (day, dataList) ->
             DailyItemReport(
                 date = day,
-                totalAmount = amounts.sum()
+                totalAmount = dataList.sumOf { it.first },
+                qty = dataList.sumOf { it.second }
             )
         }.sortedBy { it.date }
 
