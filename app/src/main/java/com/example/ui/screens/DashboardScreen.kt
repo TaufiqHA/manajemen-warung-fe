@@ -2833,7 +2833,16 @@ fun LabaRugiTabContent(
     val currentMonthYear = java.text.SimpleDateFormat("MMMM yyyy", java.util.Locale("id", "ID")).format(java.util.Date())
     var selectedLabaDateFilter by remember { mutableStateOf("Bulan Ini") }
     var expandedTrxId by remember { mutableStateOf<String?>(null) }
-    val labaDateFilters = listOf("Hari Ini", "Kemarin", "Minggu Ini", "Bulan Ini", "Bulan Lalu", "Semua")
+    val labaDateFilters = listOf("Hari Ini", "Kemarin", "Minggu Ini", "Bulan Ini", "Bulan Lalu", "Semua", "Pilih Tanggal")
+
+    var showCustomModal by remember { mutableStateOf(false) }
+    var activeStartDate by remember { mutableStateOf<java.util.Calendar?>(null) }
+    var activeEndDate by remember { mutableStateOf<java.util.Calendar?>(null) }
+    var activeDataType by remember { mutableStateOf("ALL") } // "ALL", "EXPENSE", "INCOME", "DAILY"
+
+    var tempStartDate by remember { mutableStateOf<java.util.Calendar?>(null) }
+    var tempEndDate by remember { mutableStateOf<java.util.Calendar?>(null) }
+    var tempDataType by remember { mutableStateOf("ALL") }
 
     val todaySdf = remember { java.text.SimpleDateFormat("yyyyMMdd", java.util.Locale.getDefault()) }
     val todayStr = remember { todaySdf.format(java.util.Date()) }
@@ -2984,20 +2993,86 @@ fun LabaRugiTabContent(
         }
     }
 
-    val filteredTransactions = remember(transaksiList.toList(), selectedLabaDateFilter) {
-        val completedOnly = transaksiList.filter { it.orderStatus == "COMPLETED" || it.orderStatus == null }
-        if (selectedLabaDateFilter == "Semua") {
-            completedOnly
+    fun isTrxMatchingCustomFilter(idTransaksi: String, startDate: java.util.Calendar?, endDate: java.util.Calendar?): Boolean {
+        val cal = getCalendarForTrx(idTransaksi) ?: return false
+        val start = startDate ?: return true
+        val end = endDate ?: return true
+        
+        val calDay = (cal.clone() as java.util.Calendar).apply {
+            set(java.util.Calendar.HOUR_OF_DAY, 0)
+            set(java.util.Calendar.MINUTE, 0)
+            set(java.util.Calendar.SECOND, 0)
+            set(java.util.Calendar.MILLISECOND, 0)
+        }
+        val startDay = (start.clone() as java.util.Calendar).apply {
+            set(java.util.Calendar.HOUR_OF_DAY, 0)
+            set(java.util.Calendar.MINUTE, 0)
+            set(java.util.Calendar.SECOND, 0)
+            set(java.util.Calendar.MILLISECOND, 0)
+        }
+        val endDay = (end.clone() as java.util.Calendar).apply {
+            set(java.util.Calendar.HOUR_OF_DAY, 0)
+            set(java.util.Calendar.MINUTE, 0)
+            set(java.util.Calendar.SECOND, 0)
+            set(java.util.Calendar.MILLISECOND, 0)
+        }
+        return !calDay.before(startDay) && !calDay.after(endDay)
+    }
+
+    fun isBiayaMatchingCustomFilter(tanggalStr: String, startDate: java.util.Calendar?, endDate: java.util.Calendar?): Boolean {
+        val cal = getCalendarForBiaya(tanggalStr) ?: return false
+        val start = startDate ?: return true
+        val end = endDate ?: return true
+        
+        val calDay = (cal.clone() as java.util.Calendar).apply {
+            set(java.util.Calendar.HOUR_OF_DAY, 0)
+            set(java.util.Calendar.MINUTE, 0)
+            set(java.util.Calendar.SECOND, 0)
+            set(java.util.Calendar.MILLISECOND, 0)
+        }
+        val startDay = (start.clone() as java.util.Calendar).apply {
+            set(java.util.Calendar.HOUR_OF_DAY, 0)
+            set(java.util.Calendar.MINUTE, 0)
+            set(java.util.Calendar.SECOND, 0)
+            set(java.util.Calendar.MILLISECOND, 0)
+        }
+        val endDay = (end.clone() as java.util.Calendar).apply {
+            set(java.util.Calendar.HOUR_OF_DAY, 0)
+            set(java.util.Calendar.MINUTE, 0)
+            set(java.util.Calendar.SECOND, 0)
+            set(java.util.Calendar.MILLISECOND, 0)
+        }
+        return !calDay.before(startDay) && !calDay.after(endDay)
+    }
+
+    val currentDataType = if (selectedLabaDateFilter == "Pilih Tanggal") activeDataType else "ALL"
+
+    val filteredTransactions = remember(transaksiList.toList(), selectedLabaDateFilter, activeStartDate, activeEndDate, currentDataType) {
+        if (currentDataType == "EXPENSE") {
+            emptyList()
         } else {
-            completedOnly.filter { isTrxMatchingFilter(it.idTransaksi, selectedLabaDateFilter) }
+            val completedOnly = transaksiList.filter { it.orderStatus == "COMPLETED" || it.orderStatus == null }
+            if (selectedLabaDateFilter == "Semua") {
+                completedOnly
+            } else if (selectedLabaDateFilter == "Pilih Tanggal") {
+                completedOnly.filter { isTrxMatchingCustomFilter(it.idTransaksi, activeStartDate, activeEndDate) }
+            } else {
+                completedOnly.filter { isTrxMatchingFilter(it.idTransaksi, selectedLabaDateFilter) }
+            }
         }
     }
 
-    val filteredBiaya = remember(biayaList.toList(), selectedLabaDateFilter) {
-        if (selectedLabaDateFilter == "Semua") {
-            biayaList
+    val filteredBiaya = remember(biayaList.toList(), selectedLabaDateFilter, activeStartDate, activeEndDate, currentDataType) {
+        if (currentDataType == "INCOME" || currentDataType == "DAILY") {
+            emptyList()
         } else {
-            biayaList.filter { isBiayaMatchingFilter(it.tanggal, selectedLabaDateFilter) }
+            if (selectedLabaDateFilter == "Semua") {
+                biayaList
+            } else if (selectedLabaDateFilter == "Pilih Tanggal") {
+                biayaList.filter { isBiayaMatchingCustomFilter(it.tanggal, activeStartDate, activeEndDate) }
+            } else {
+                biayaList.filter { isBiayaMatchingFilter(it.tanggal, selectedLabaDateFilter) }
+            }
         }
     }
 
@@ -3006,6 +3081,18 @@ fun LabaRugiTabContent(
         .sumOf { it.jumlah * it.harga }
     val totalBiaya = filteredBiaya.sumOf { it.jumlah }
     val labaBersih = totalPemasukan - totalBiaya
+
+    val showRekapPerforma = currentDataType != "DAILY"
+    val showTotalPenjualanInRekap = currentDataType == "ALL" || currentDataType == "INCOME"
+    val showTotalPengeluaranInRekap = currentDataType == "ALL" || currentDataType == "EXPENSE"
+    val showLabaBersihInRekap = currentDataType == "ALL"
+
+    val showLaporanBulananItemCard = currentDataType == "ALL" || currentDataType == "INCOME"
+
+    val showRincianHarianSection = currentDataType == "ALL" || currentDataType == "INCOME" || currentDataType == "DAILY"
+    val showRincianPengeluaranSection = currentDataType == "ALL" || currentDataType == "EXPENSE"
+    val showDaftarTransaksiPerStrukSection = currentDataType == "ALL" || currentDataType == "INCOME"
+    val showMenuTerlarisSection = currentDataType == "ALL" || currentDataType == "INCOME"
 
     fun formatReadableDate(dateStr: String): String {
         return try {
@@ -3088,34 +3175,43 @@ fun LabaRugiTabContent(
         Spacer(modifier = Modifier.height(16.dp))
 
         // --- Fitur Baru: Laporan Bulanan per Item ---
-        Card(
-            modifier = Modifier.fillMaxWidth().padding(bottom = 24.dp),
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer),
-            shape = RoundedCornerShape(12.dp)
-        ) {
-            Column(modifier = Modifier.padding(16.dp)) {
-                Text(
-                    text = "Laporan Bulanan per Item",
-                    style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onPrimaryContainer
-                )
-                Text(
-                    text = "Lihat rincian penjualan harian untuk setiap barang.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f)
-                )
-                Spacer(modifier = Modifier.height(12.dp))
-                Button(
-                    onClick = onNavigateToMonthlyReport,
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
-                ) {
-                    Icon(AppIcons.Calendar, contentDescription = null)
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text("Buka Laporan Item")
+        if (showLaporanBulananItemCard) {
+            Card(
+                modifier = Modifier.fillMaxWidth().padding(bottom = 24.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer),
+                shape = RoundedCornerShape(12.dp)
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Text(
+                        text = "Laporan Bulanan per Item",
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onPrimaryContainer
+                    )
+                    Text(
+                        text = "Lihat rincian penjualan harian untuk setiap barang.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f)
+                    )
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Button(
+                        onClick = onNavigateToMonthlyReport,
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
+                    ) {
+                        Icon(AppIcons.Calendar, contentDescription = null)
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("Buka Laporan Item")
+                    }
                 }
             }
+        }
+
+        val pdfFilterLabel = if (selectedLabaDateFilter == "Pilih Tanggal" && activeStartDate != null && activeEndDate != null) {
+            val sdf = java.text.SimpleDateFormat("dd/MM/yyyy", java.util.Locale.getDefault())
+            "Custom (${sdf.format(activeStartDate!!.time)} - ${sdf.format(activeEndDate!!.time)})"
+        } else {
+            selectedLabaDateFilter
         }
 
         Row(
@@ -3128,7 +3224,7 @@ fun LabaRugiTabContent(
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.Bold
             )
-            IconButton(onClick = { generateLabaRugiPdf(context, filteredTransactions, filteredBiaya, selectedLabaDateFilter) }) {
+            IconButton(onClick = { generateLabaRugiPdf(context, filteredTransactions, filteredBiaya, pdfFilterLabel) }) {
                 Icon(imageVector = AppIcons.Pdf, contentDescription = "Export PDF", tint = MaterialTheme.colorScheme.primary)
             }
         }
@@ -3142,8 +3238,33 @@ fun LabaRugiTabContent(
                 val isSelected = selectedLabaDateFilter == dateFilter
                 FilterChip(
                     selected = isSelected,
-                    onClick = { selectedLabaDateFilter = dateFilter },
-                    label = { Text(dateFilter) },
+                    onClick = {
+                        if (dateFilter == "Pilih Tanggal") {
+                            tempStartDate = activeStartDate ?: java.util.Calendar.getInstance()
+                            tempEndDate = activeEndDate ?: java.util.Calendar.getInstance()
+                            tempDataType = activeDataType
+                            showCustomModal = true
+                        } else {
+                            selectedLabaDateFilter = dateFilter
+                        }
+                    },
+                    label = {
+                        if (dateFilter == "Pilih Tanggal" && selectedLabaDateFilter == "Pilih Tanggal" && activeStartDate != null && activeEndDate != null) {
+                            val sdf = java.text.SimpleDateFormat("dd/MM/yyyy", java.util.Locale.getDefault())
+                            Text("Pilih Tanggal (${sdf.format(activeStartDate!!.time)} - ${sdf.format(activeEndDate!!.time)})")
+                        } else {
+                            Text(dateFilter)
+                        }
+                    },
+                    leadingIcon = {
+                        if (dateFilter == "Pilih Tanggal") {
+                            Icon(
+                                imageVector = AppIcons.Calendar,
+                                contentDescription = null,
+                                modifier = Modifier.size(FilterChipDefaults.IconSize)
+                            )
+                        }
+                    },
                     colors = FilterChipDefaults.filterChipColors(
                         selectedContainerColor = MaterialTheme.colorScheme.primary,
                         selectedLabelColor = Color.White
@@ -3152,386 +3273,553 @@ fun LabaRugiTabContent(
             }
         }
 
-        // C. Laporan Laba-Rugi (Keeping this as summary)
-        Card(
-            modifier = Modifier.fillMaxWidth().padding(bottom = 24.dp),
-            colors = CardDefaults.cardColors(
-                containerColor = if (labaBersih >= 0) SuccessColor.copy(alpha = 0.1f) else DangerColor.copy(alpha = 0.1f)
-            ),
-            shape = RoundedCornerShape(12.dp)
-        ) {
-            Column(modifier = Modifier.padding(16.dp)) {
-                Text(
-                    text = "Rekap Performa ($selectedLabaDateFilter)",
-                    style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.Bold
-                )
-                Text(
-                    text = "(Penjualan - Pengeluaran)",
-                    style = MaterialTheme.typography.labelMedium,
-                    color = Color.Gray
-                )
-                Spacer(modifier = Modifier.height(12.dp))
+        // Custom Date Filter Modal UI
+        if (showCustomModal) {
+            val calendarStart = tempStartDate ?: java.util.Calendar.getInstance()
+            val calendarEnd = tempEndDate ?: java.util.Calendar.getInstance()
 
-                Row(
-                    modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    Text(text = "Total Penjualan", style = MaterialTheme.typography.bodyMedium)
-                    Text(text = formatRupiah(totalPemasukan.toLong()), style = MaterialTheme.typography.bodyMedium, color = SuccessColor)
+            var tempStartDateStr by remember(tempStartDate) {
+                mutableStateOf(tempStartDate?.let { java.text.SimpleDateFormat("d MMMM yyyy", java.util.Locale("in", "ID")).format(it.time) } ?: "")
+            }
+            var tempEndDateStr by remember(tempEndDate) {
+                mutableStateOf(tempEndDate?.let { java.text.SimpleDateFormat("d MMMM yyyy", java.util.Locale("in", "ID")).format(it.time) } ?: "")
+            }
+
+            val datePickerDialogStart = android.app.DatePickerDialog(
+                context,
+                { _, year, month, dayOfMonth ->
+                    val cal = java.util.Calendar.getInstance()
+                    cal.set(year, month, dayOfMonth)
+                    tempStartDate = cal
+                    tempStartDateStr = java.text.SimpleDateFormat("d MMMM yyyy", java.util.Locale("in", "ID")).format(cal.time)
+                },
+                calendarStart.get(java.util.Calendar.YEAR),
+                calendarStart.get(java.util.Calendar.MONTH),
+                calendarStart.get(java.util.Calendar.DAY_OF_MONTH)
+            )
+
+            val datePickerDialogEnd = android.app.DatePickerDialog(
+                context,
+                { _, year, month, dayOfMonth ->
+                    val cal = java.util.Calendar.getInstance()
+                    cal.set(year, month, dayOfMonth)
+                    tempEndDate = cal
+                    tempEndDateStr = java.text.SimpleDateFormat("d MMMM yyyy", java.util.Locale("in", "ID")).format(cal.time)
+                },
+                calendarEnd.get(java.util.Calendar.YEAR),
+                calendarEnd.get(java.util.Calendar.MONTH),
+                calendarEnd.get(java.util.Calendar.DAY_OF_MONTH)
+            )
+
+            AlertDialog(
+                onDismissRequest = { showCustomModal = false },
+                title = { Text("Filter Custom Tanggal & Jenis Data") },
+                text = {
+                    Column(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalArrangement = Arrangement.spacedBy(16.dp)
+                    ) {
+                        // Start Date Pick
+                        Column {
+                            Text("Tanggal Mulai *", style = MaterialTheme.typography.labelLarge)
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Box {
+                                OutlinedTextField(
+                                    value = tempStartDateStr,
+                                    onValueChange = {},
+                                    readOnly = true,
+                                    modifier = Modifier.fillMaxWidth(),
+                                    trailingIcon = { Icon(AppIcons.Calendar, contentDescription = null) }
+                                )
+                                Box(modifier = Modifier.matchParentSize().clickable { datePickerDialogStart.show() }.background(Color.Transparent))
+                            }
+                        }
+
+                        // End Date Pick
+                        Column {
+                            Text("Tanggal Selesai *", style = MaterialTheme.typography.labelLarge)
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Box {
+                                OutlinedTextField(
+                                    value = tempEndDateStr,
+                                    onValueChange = {},
+                                    readOnly = true,
+                                    modifier = Modifier.fillMaxWidth(),
+                                    trailingIcon = { Icon(AppIcons.Calendar, contentDescription = null) }
+                                )
+                                Box(modifier = Modifier.matchParentSize().clickable { datePickerDialogEnd.show() }.background(Color.Transparent))
+                            }
+                        }
+
+                        // Data Type selection
+                        Column {
+                            Text("Jenis Data", style = MaterialTheme.typography.labelLarge)
+                            Spacer(modifier = Modifier.height(8.dp))
+                            val options = listOf(
+                                Triple("ALL", "Tampilkan Semua", "Semua data pemasukan dan pengeluaran"),
+                                Triple("EXPENSE", "Pengeluaran Saja", "Hanya data pengeluaran operasional"),
+                                Triple("INCOME", "Pemasukan Saja", "Hanya data penjualan masuk"),
+                                Triple("DAILY", "Rincian Harian Saja", "Hanya rincian transaksi harian")
+                            )
+                            options.forEach { (type, label, desc) ->
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clickable { tempDataType = type }
+                                        .padding(vertical = 6.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    RadioButton(
+                                        selected = (tempDataType == type),
+                                        onClick = { tempDataType = type }
+                                    )
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Column {
+                                        Text(text = label, style = MaterialTheme.typography.bodyMedium)
+                                        Text(text = desc, style = MaterialTheme.typography.bodySmall, color = Color.Gray)
+                                    }
+                                }
+                            }
+                        }
+                    }
+                },
+                confirmButton = {
+                    TextButton(
+                        onClick = {
+                            val start = tempStartDate
+                            val end = tempEndDate
+                            if (start != null && end != null && start.after(end)) {
+                                android.widget.Toast.makeText(context, "Tanggal Mulai tidak boleh melebihi Tanggal Selesai", android.widget.Toast.LENGTH_SHORT).show()
+                            } else {
+                                activeStartDate = start
+                                activeEndDate = end
+                                activeDataType = tempDataType
+                                selectedLabaDateFilter = "Pilih Tanggal"
+                                showCustomModal = false
+                            }
+                        }
+                    ) {
+                        Text("Terapkan")
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { showCustomModal = false }) {
+                        Text("Batal")
+                    }
                 }
-                Row(
-                    modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    Text(text = "Total Pengeluaran", style = MaterialTheme.typography.bodyMedium)
-                    Text(text = "- ${formatRupiah(totalBiaya.toLong())}", style = MaterialTheme.typography.bodyMedium, color = DangerColor)
-                }
-                Divider(modifier = Modifier.padding(vertical = 8.dp))
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(text = "Laba Bersih:", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+            )
+        }
+
+        // C. Laporan Laba-Rugi (Keeping this as summary)
+        if (showRekapPerforma) {
+            val performanceHeaderLabel = if (selectedLabaDateFilter == "Pilih Tanggal" && activeStartDate != null && activeEndDate != null) {
+                val sdf = java.text.SimpleDateFormat("dd/MM/yyyy", java.util.Locale.getDefault())
+                "Custom (${sdf.format(activeStartDate!!.time)} - ${sdf.format(activeEndDate!!.time)})"
+            } else {
+                selectedLabaDateFilter
+            }
+            Card(
+                modifier = Modifier.fillMaxWidth().padding(bottom = 24.dp),
+                colors = CardDefaults.cardColors(
+                    containerColor = if (labaBersih >= 0) SuccessColor.copy(alpha = 0.1f) else DangerColor.copy(alpha = 0.1f)
+                ),
+                shape = RoundedCornerShape(12.dp)
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
                     Text(
-                        text = formatRupiah(labaBersih.toLong()),
-                        style = MaterialTheme.typography.titleLarge,
-                        fontWeight = FontWeight.ExtraBold,
-                        color = if (labaBersih >= 0) SuccessColor else DangerColor
+                        text = "Rekap Performa ($performanceHeaderLabel)",
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.Bold
                     )
+                    Text(
+                        text = "(Penjualan - Pengeluaran)",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = Color.Gray
+                    )
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    if (showTotalPenjualanInRekap) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Text(text = "Total Penjualan", style = MaterialTheme.typography.bodyMedium)
+                            Text(text = formatRupiah(totalPemasukan.toLong()), style = MaterialTheme.typography.bodyMedium, color = SuccessColor)
+                        }
+                    }
+                    if (showTotalPengeluaranInRekap) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Text(text = "Total Pengeluaran", style = MaterialTheme.typography.bodyMedium)
+                            Text(text = "- ${formatRupiah(totalBiaya.toLong())}", style = MaterialTheme.typography.bodyMedium, color = DangerColor)
+                        }
+                    }
+                    if (showLabaBersihInRekap) {
+                        Divider(modifier = Modifier.padding(vertical = 8.dp))
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(text = "Laba Bersih:", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                            Text(
+                                text = formatRupiah(labaBersih.toLong()),
+                                style = MaterialTheme.typography.titleLarge,
+                                fontWeight = FontWeight.ExtraBold,
+                                color = if (labaBersih >= 0) SuccessColor else DangerColor
+                            )
+                        }
+                    }
                 }
             }
         }
 
-        Spacer(modifier = Modifier.height(16.dp))
+        val sectionHeaderLabel = if (selectedLabaDateFilter == "Pilih Tanggal" && activeStartDate != null && activeEndDate != null) {
+            val sdf = java.text.SimpleDateFormat("dd/MM/yyyy", java.util.Locale.getDefault())
+            "Custom (${sdf.format(activeStartDate!!.time)} - ${sdf.format(activeEndDate!!.time)})"
+        } else {
+            selectedLabaDateFilter
+        }
 
-        Text(
-            text = "Rincian Harian",
-            style = MaterialTheme.typography.titleMedium,
-            fontWeight = FontWeight.Bold,
-            modifier = Modifier.padding(bottom = 12.dp)
-        )
+        if (showRincianHarianSection) {
+            Spacer(modifier = Modifier.height(16.dp))
 
-        Card(
-            modifier = Modifier.fillMaxWidth().padding(bottom = 24.dp),
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-            shape = RoundedCornerShape(12.dp),
-            elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
-        ) {
-            Column(modifier = Modifier.padding(16.dp)) {
-                if (transactionsByDate.isEmpty()) {
-                    Text(
-                        text = currentMonthYear,
-                        style = MaterialTheme.typography.titleSmall,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.padding(bottom = 8.dp)
-                    )
-                    Text(
-                        text = "Belum ada rincian harian",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = Color.Gray,
-                        modifier = Modifier.padding(vertical = 8.dp)
-                    )
-                } else {
-                    transactionsByDate.forEachIndexed { index, (tanggal, trxGroup) ->
-                        val dailyTotalRevenue = trxGroup.values.flatten().sumOf { it.jumlah * it.harga }.toLong()
-                        
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(bottom = 8.dp),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Text(
-                                text = tanggal,
-                                style = MaterialTheme.typography.titleSmall,
-                                fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.primary
-                            )
-                            Text(
-                                text = formatRupiah(dailyTotalRevenue),
-                                style = MaterialTheme.typography.titleSmall,
-                                fontWeight = FontWeight.Bold,
-                                color = SuccessColor
-                            )
-                        }
-                
-                        trxGroup.forEach { (trxId, itemsInTrx) ->
-                            val totalTrxPrice = itemsInTrx.sumOf { it.jumlah * it.harga }
-                            val totalItems = itemsInTrx.size
-                            val rawTime = itemsInTrx.firstOrNull()?.waktu ?: ""
-                            val timeDisplay = if (rawTime.contains("T")) {
-                                rawTime.substringAfter("T").take(5)
-                            } else rawTime.take(5)
+            Text(
+                text = "Rincian Harian",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier.padding(bottom = 12.dp)
+            )
+
+            Card(
+                modifier = Modifier.fillMaxWidth().padding(bottom = 24.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                shape = RoundedCornerShape(12.dp),
+                elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    if (transactionsByDate.isEmpty()) {
+                        Text(
+                            text = currentMonthYear,
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.padding(bottom = 8.dp)
+                        )
+                        Text(
+                            text = "Belum ada rincian harian",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = Color.Gray,
+                            modifier = Modifier.padding(vertical = 8.dp)
+                        )
+                    } else {
+                        transactionsByDate.forEachIndexed { index, (tanggal, trxGroup) ->
+                            val dailyTotalRevenue = trxGroup.values.flatten().sumOf { it.jumlah * it.harga }.toLong()
                             
-                            Card(
+                            Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .padding(bottom = 8.dp)
-                                    .clickable { expandedTrxId = if (expandedTrxId == trxId) null else trxId },
-                                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)),
-                                shape = RoundedCornerShape(8.dp)
+                                    .padding(bottom = 8.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Column {
-                                    Row(
-                                        modifier = Modifier.padding(12.dp).fillMaxWidth(),
-                                        horizontalArrangement = Arrangement.SpaceBetween,
-                                        verticalAlignment = Alignment.CenterVertically
-                                    ) {
-                                        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
-                                            Box(
-                                                modifier = Modifier
-                                                    .size(40.dp)
-                                                    .background(MaterialTheme.colorScheme.primary.copy(alpha=0.1f), androidx.compose.foundation.shape.CircleShape),
-                                                contentAlignment = Alignment.Center
-                                            ) { 
-                                                Text("🧾", style = MaterialTheme.typography.titleSmall) 
+                                Text(
+                                    text = tanggal,
+                                    style = MaterialTheme.typography.titleSmall,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.primary
+                                )
+                                Text(
+                                    text = formatRupiah(dailyTotalRevenue),
+                                    style = MaterialTheme.typography.titleSmall,
+                                    fontWeight = FontWeight.Bold,
+                                    color = SuccessColor
+                                )
+                            }
+                    
+                            trxGroup.forEach { (trxId, itemsInTrx) ->
+                                val totalTrxPrice = itemsInTrx.sumOf { it.jumlah * it.harga }
+                                val totalItems = itemsInTrx.size
+                                val rawTime = itemsInTrx.firstOrNull()?.waktu ?: ""
+                                val timeDisplay = if (rawTime.contains("T")) {
+                                    rawTime.substringAfter("T").take(5)
+                                } else rawTime.take(5)
+                                
+                                Card(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(bottom = 8.dp)
+                                        .clickable { expandedTrxId = if (expandedTrxId == trxId) null else trxId },
+                                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)),
+                                    shape = RoundedCornerShape(8.dp)
+                                ) {
+                                    Column {
+                                        Row(
+                                            modifier = Modifier.padding(12.dp).fillMaxWidth(),
+                                            horizontalArrangement = Arrangement.SpaceBetween,
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
+                                                Box(
+                                                    modifier = Modifier
+                                                        .size(40.dp)
+                                                        .background(MaterialTheme.colorScheme.primary.copy(alpha=0.1f), androidx.compose.foundation.shape.CircleShape),
+                                                    contentAlignment = Alignment.Center
+                                                ) { 
+                                                    Text("🧾", style = MaterialTheme.typography.titleSmall) 
+                                                }
+                                                
+                                                Spacer(modifier = Modifier.width(12.dp))
+                                                
+                                                Column {
+                                                    Text(trxId, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)
+                                                    Text("$timeDisplay · $totalItems item", style = MaterialTheme.typography.labelMedium, color = Color.Gray)
+                                                }
                                             }
                                             
-                                            Spacer(modifier = Modifier.width(12.dp))
-                                            
-                                            Column {
-                                                Text(trxId, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)
-                                                Text("$timeDisplay · $totalItems item", style = MaterialTheme.typography.labelMedium, color = Color.Gray)
-                                            }
+                                            Text(
+                                                formatRupiah(totalTrxPrice.toLong()), 
+                                                style = MaterialTheme.typography.bodyMedium, 
+                                                fontWeight = FontWeight.Bold,
+                                                color = SuccessColor
+                                            )
                                         }
-                                        
-                                        Text(
-                                            formatRupiah(totalTrxPrice.toLong()), 
-                                            style = MaterialTheme.typography.bodyMedium, 
-                                            fontWeight = FontWeight.Bold,
-                                            color = SuccessColor
-                                        )
-                                    }
-                                    if (expandedTrxId == trxId) {
-                                        Divider(
-                                            modifier = Modifier.padding(horizontal = 12.dp),
-                                            color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
-                                        )
-                                        Column(modifier = Modifier.padding(12.dp)) {
-                                            itemsInTrx.forEach { item ->
-                                                Row(
-                                                    modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
-                                                    horizontalArrangement = Arrangement.SpaceBetween
-                                                ) {
-                                                    Text(
-                                                        text = "${item.jumlah}x ${item.namaItem}",
-                                                        style = MaterialTheme.typography.bodySmall
-                                                    )
-                                                    Text(
-                                                        text = formatRupiah((item.jumlah * item.harga).toLong()),
-                                                        style = MaterialTheme.typography.bodySmall
-                                                    )
+                                        if (expandedTrxId == trxId) {
+                                            Divider(
+                                                modifier = Modifier.padding(horizontal = 12.dp),
+                                                color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
+                                            )
+                                            Column(modifier = Modifier.padding(12.dp)) {
+                                                itemsInTrx.forEach { item ->
+                                                    Row(
+                                                        modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                                                        horizontalArrangement = Arrangement.SpaceBetween
+                                                    ) {
+                                                        Text(
+                                                            text = "${item.jumlah}x ${item.namaItem}",
+                                                            style = MaterialTheme.typography.bodySmall
+                                                        )
+                                                        Text(
+                                                            text = formatRupiah((item.jumlah * item.harga).toLong()),
+                                                            style = MaterialTheme.typography.bodySmall
+                                                        )
+                                                    }
                                                 }
                                             }
                                         }
                                     }
                                 }
                             }
-                        }
-                        
-                        if (index < transactionsByDate.size - 1) {
-                            Divider(modifier = Modifier.padding(vertical = 12.dp))
-                        }
-                    }
-                }
-            }
-        }
-
-        Spacer(modifier = Modifier.height(16.dp))
-
-        // --- START: RINCIAN PENGELUARAN ---
-        Text(
-            text = "Rincian Pengeluaran",
-            style = MaterialTheme.typography.titleMedium,
-            fontWeight = FontWeight.Bold,
-            modifier = Modifier.padding(bottom = 12.dp)
-        )
-
-        Card(
-            modifier = Modifier.fillMaxWidth().padding(bottom = 24.dp),
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-            shape = RoundedCornerShape(12.dp),
-            elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
-        ) {
-            Column(modifier = Modifier.padding(16.dp)) {
-                if (rincianPengeluaranList.isEmpty()) {
-                    Text(
-                        text = "Belum ada rincian pengeluaran",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = Color.Gray,
-                        modifier = Modifier.padding(vertical = 8.dp)
-                    )
-                } else {
-                    rincianPengeluaranList.forEachIndexed { index, item ->
-                        if (index > 0) {
-                            Divider(modifier = Modifier.padding(vertical = 8.dp))
-                        }
-                        Column(modifier = Modifier.fillMaxWidth()) {
-                            Text(
-                                text = item.first, // Menampilkan Tanggal
-                                style = MaterialTheme.typography.bodyMedium,
-                                fontWeight = FontWeight.Bold
-                            )
-                            Spacer(modifier = Modifier.height(4.dp))
-                            Text(
-                                text = "${item.second} pengeluaran  •  - ${formatRupiah(item.third)}",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = DangerColor
-                            )
+                            
+                            if (index < transactionsByDate.size - 1) {
+                                Divider(modifier = Modifier.padding(vertical = 12.dp))
+                            }
                         }
                     }
                 }
             }
         }
-        Spacer(modifier = Modifier.height(16.dp))
 
-        Text(
-            text = "🧾 Daftar Transaksi Per Struk ($selectedLabaDateFilter)",
-            style = MaterialTheme.typography.titleMedium,
-            fontWeight = FontWeight.Bold,
-            modifier = Modifier.padding(bottom = 12.dp)
-        )
+        if (showRincianPengeluaranSection) {
+            Spacer(modifier = Modifier.height(16.dp))
 
-        Card(
-            modifier = Modifier.fillMaxWidth().padding(bottom = 24.dp),
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-            shape = RoundedCornerShape(12.dp),
-            elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
-        ) {
-            Column(modifier = Modifier.padding(16.dp)) {
-                if (groupedTransactions.isEmpty()) {
-                    Text(
-                        text = "Belum ada transaksi",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = Color.Gray,
-                        modifier = Modifier.padding(vertical = 8.dp)
-                    )
-                } else {
-                    val trxKeys = groupedTransactions.keys.toList()
-                    trxKeys.forEachIndexed { index, trxId ->
-                        val items = groupedTransactions[trxId] ?: emptyList()
-                        val totalHarga = items.sumOf { it.jumlah * it.harga }
-                        val isCanceled = items.any { it.namaItem.startsWith("❌") }
+            // --- START: RINCIAN PENGELUARAN ---
+            Text(
+                text = "Rincian Pengeluaran",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier.padding(bottom = 12.dp)
+            )
 
-                        Row(
-                            modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Column {
+            Card(
+                modifier = Modifier.fillMaxWidth().padding(bottom = 24.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                shape = RoundedCornerShape(12.dp),
+                elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    if (rincianPengeluaranList.isEmpty()) {
+                        Text(
+                            text = "Belum ada rincian pengeluaran",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = Color.Gray,
+                            modifier = Modifier.padding(vertical = 8.dp)
+                        )
+                    } else {
+                        rincianPengeluaranList.forEachIndexed { index, item ->
+                            if (index > 0) {
+                                Divider(modifier = Modifier.padding(vertical = 8.dp))
+                            }
+                            Column(modifier = Modifier.fillMaxWidth()) {
                                 Text(
-                                    text = trxId,
+                                    text = item.first, // Menampilkan Tanggal
                                     style = MaterialTheme.typography.bodyMedium,
-                                    fontWeight = FontWeight.Bold,
-                                    color = if (isCanceled) DangerColor else Color.Unspecified
+                                    fontWeight = FontWeight.Bold
                                 )
-                                if (isCanceled) {
-                                    Text(
-                                        text = "Dibatalkan",
-                                        style = MaterialTheme.typography.labelSmall,
-                                        color = DangerColor
-                                    )
-                                } else {
-                                    // Ambil metode pembayaran dari salah satu item di dalam struk (karena 1 struk metode pembayarannya sama)
-                                    val paymentMethod = items.firstOrNull()?.metodePembayaran ?: ""
-                                    val paymentText = if (paymentMethod.isNotEmpty()) " • ${paymentMethod.uppercase()}" else ""
+                                Spacer(modifier = Modifier.height(4.dp))
+                                Text(
+                                    text = "${item.second} pengeluaran  •  - ${formatRupiah(item.third)}",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = DangerColor
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
 
-                                    Row(verticalAlignment = Alignment.CenterVertically) {
+        if (showDaftarTransaksiPerStrukSection) {
+            Spacer(modifier = Modifier.height(16.dp))
+
+            Text(
+                text = "🧾 Daftar Transaksi Per Struk ($sectionHeaderLabel)",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier.padding(bottom = 12.dp)
+            )
+
+            Card(
+                modifier = Modifier.fillMaxWidth().padding(bottom = 24.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                shape = RoundedCornerShape(12.dp),
+                elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    if (groupedTransactions.isEmpty()) {
+                        Text(
+                            text = "Belum ada transaksi",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = Color.Gray,
+                            modifier = Modifier.padding(vertical = 8.dp)
+                        )
+                    } else {
+                        val trxKeys = groupedTransactions.keys.toList()
+                        trxKeys.forEachIndexed { index, trxId ->
+                            val items = groupedTransactions[trxId] ?: emptyList()
+                            val totalHarga = items.sumOf { it.jumlah * it.harga }
+                            val isCanceled = items.any { it.namaItem.startsWith("❌") }
+
+                            Row(
+                                modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Column {
+                                    Text(
+                                        text = trxId,
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        fontWeight = FontWeight.Bold,
+                                        color = if (isCanceled) DangerColor else Color.Unspecified
+                                    )
+                                    if (isCanceled) {
                                         Text(
-                                            text = "Berhasil",
+                                            text = "Dibatalkan",
                                             style = MaterialTheme.typography.labelSmall,
-                                            color = SuccessColor
+                                            color = DangerColor
                                         )
-                                        if (paymentText.isNotEmpty()) {
+                                    } else {
+                                        // Ambil metode pembayaran dari salah satu item di dalam struk (karena 1 struk metode pembayarannya sama)
+                                        val paymentMethod = items.firstOrNull()?.metodePembayaran ?: ""
+                                        val paymentText = if (paymentMethod.isNotEmpty()) " • ${paymentMethod.uppercase()}" else ""
+
+                                        Row(verticalAlignment = Alignment.CenterVertically) {
                                             Text(
-                                                text = paymentText,
+                                                text = "Berhasil",
                                                 style = MaterialTheme.typography.labelSmall,
-                                                color = Color.Gray,
-                                                modifier = Modifier.padding(start = 4.dp)
+                                                color = SuccessColor
                                             )
+                                            if (paymentText.isNotEmpty()) {
+                                                Text(
+                                                    text = paymentText,
+                                                    style = MaterialTheme.typography.labelSmall,
+                                                    color = Color.Gray,
+                                                    modifier = Modifier.padding(start = 4.dp)
+                                                )
+                                            }
                                         }
                                     }
                                 }
+                                Text(
+                                    text = formatRupiah(totalHarga.toLong()),
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    fontWeight = FontWeight.Bold,
+                                    color = if (isCanceled) DangerColor else SuccessColor
+                                )
                             }
-                            Text(
-                                text = formatRupiah(totalHarga.toLong()),
-                                style = MaterialTheme.typography.bodyMedium,
-                                fontWeight = FontWeight.Bold,
-                                color = if (isCanceled) DangerColor else SuccessColor
-                            )
-                        }
 
-                        if (index < trxKeys.size - 1) {
-                            Divider(modifier = Modifier.padding(vertical = 4.dp))
+                            if (index < trxKeys.size - 1) {
+                                Divider(modifier = Modifier.padding(vertical = 4.dp))
+                            }
                         }
                     }
                 }
             }
         }
 
-        Spacer(modifier = Modifier.height(16.dp))
+        if (showMenuTerlarisSection) {
+            Spacer(modifier = Modifier.height(16.dp))
 
-        Text(
-            text = "🏆 Menu Terlaris ($selectedLabaDateFilter)",
-            style = MaterialTheme.typography.titleMedium,
-            fontWeight = FontWeight.Bold,
-            modifier = Modifier.padding(bottom = 12.dp)
-        )
+            Text(
+                text = "🏆 Menu Terlaris ($sectionHeaderLabel)",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier.padding(bottom = 12.dp)
+            )
 
-        Card(
-            modifier = Modifier.fillMaxWidth().padding(bottom = 24.dp),
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-            shape = RoundedCornerShape(12.dp),
-            elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
-        ) {
-            Column(modifier = Modifier.padding(16.dp)) {
-                if (menuTerlarisList.isEmpty()) {
-                    Text(
-                        text = "Belum ada data penjualan",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = Color.Gray,
-                        modifier = Modifier.padding(vertical = 8.dp)
-                    )
-                } else {
-                    menuTerlarisList.forEachIndexed { index, item ->
-                        if (index > 0) {
-                            Divider(modifier = Modifier.padding(vertical = 8.dp))
-                        }
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            val rankColor = when (item.ranking) {
-                                1 -> Color(0xFFFFD700) // Gold
-                                2 -> Color(0xFFC0C0C0) // Silver
-                                3 -> Color(0xFFCD7F32) // Bronze
-                                else -> MaterialTheme.colorScheme.onSurface
+            Card(
+                modifier = Modifier.fillMaxWidth().padding(bottom = 24.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                shape = RoundedCornerShape(12.dp),
+                elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    if (menuTerlarisList.isEmpty()) {
+                        Text(
+                            text = "Belum ada data penjualan",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = Color.Gray,
+                            modifier = Modifier.padding(vertical = 8.dp)
+                        )
+                    } else {
+                        menuTerlarisList.forEachIndexed { index, item ->
+                            if (index > 0) {
+                                Divider(modifier = Modifier.padding(vertical = 8.dp))
                             }
-                            Column {
-                                Row(verticalAlignment = Alignment.CenterVertically) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                val rankColor = when (item.ranking) {
+                                    1 -> Color(0xFFFFD700) // Gold
+                                    2 -> Color(0xFFC0C0C0) // Silver
+                                    3 -> Color(0xFFCD7F32) // Bronze
+                                    else -> MaterialTheme.colorScheme.onSurface
+                                }
+                                Column {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Text(
+                                            text = "#${item.ranking} ",
+                                            fontWeight = FontWeight.Bold,
+                                            color = rankColor,
+                                            style = MaterialTheme.typography.bodyMedium
+                                        )
+                                        Text(
+                                            text = item.namaBarang,
+                                            fontWeight = FontWeight.Bold,
+                                            style = MaterialTheme.typography.bodyMedium
+                                        )
+                                    }
+                                    Spacer(modifier = Modifier.height(4.dp))
                                     Text(
-                                        text = "#${item.ranking} ",
-                                        fontWeight = FontWeight.Bold,
-                                        color = rankColor,
-                                        style = MaterialTheme.typography.bodyMedium
-                                    )
-                                    Text(
-                                        text = item.namaBarang,
-                                        fontWeight = FontWeight.Bold,
-                                        style = MaterialTheme.typography.bodyMedium
+                                        text = "${item.totalQty} porsi terjual  •  ${formatRupiah(item.totalPendapatan)}",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = Color.Gray
                                     )
                                 }
-                                Spacer(modifier = Modifier.height(4.dp))
-                                Text(
-                                    text = "${item.totalQty} porsi terjual  •  ${formatRupiah(item.totalPendapatan)}",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = Color.Gray
-                                )
                             }
                         }
                     }
