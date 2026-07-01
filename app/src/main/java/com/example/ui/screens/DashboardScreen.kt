@@ -2833,6 +2833,7 @@ fun LabaRugiTabContent(
     val currentMonthYear = java.text.SimpleDateFormat("MMMM yyyy", java.util.Locale("id", "ID")).format(java.util.Date())
     var selectedLabaDateFilter by remember { mutableStateOf("Bulan Ini") }
     var expandedTrxId by remember { mutableStateOf<String?>(null) }
+    var expandedDates by remember { mutableStateOf(setOf<String>()) }
     val labaDateFilters = listOf("Hari Ini", "Kemarin", "Minggu Ini", "Bulan Ini", "Bulan Lalu", "Semua", "Pilih Tanggal")
 
     var showCustomModal by remember { mutableStateOf(false) }
@@ -3517,11 +3518,19 @@ fun LabaRugiTabContent(
                     } else {
                         transactionsByDate.forEachIndexed { index, (tanggal, trxGroup) ->
                             val dailyTotalRevenue = trxGroup.values.flatten().sumOf { it.jumlah * it.harga }.toLong()
+                            val isDateExpanded = expandedDates.contains(tanggal)
                             
                             Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .padding(bottom = 8.dp),
+                                    .clickable {
+                                        expandedDates = if (isDateExpanded) {
+                                            expandedDates - tanggal
+                                        } else {
+                                            expandedDates + tanggal
+                                        }
+                                    }
+                                    .padding(vertical = 8.dp),
                                 horizontalArrangement = Arrangement.SpaceBetween,
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
@@ -3531,80 +3540,93 @@ fun LabaRugiTabContent(
                                     fontWeight = FontWeight.Bold,
                                     color = MaterialTheme.colorScheme.primary
                                 )
-                                Text(
-                                    text = formatRupiah(dailyTotalRevenue),
-                                    style = MaterialTheme.typography.titleSmall,
-                                    fontWeight = FontWeight.Bold,
-                                    color = SuccessColor
-                                )
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Text(
+                                        text = formatRupiah(dailyTotalRevenue),
+                                        style = MaterialTheme.typography.titleSmall,
+                                        fontWeight = FontWeight.Bold,
+                                        color = SuccessColor
+                                    )
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Icon(
+                                        imageVector = if (isDateExpanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
+                                        contentDescription = "Expand/Collapse",
+                                        tint = Color.Gray,
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                }
                             }
                     
-                            trxGroup.forEach { (trxId, itemsInTrx) ->
-                                val totalTrxPrice = itemsInTrx.sumOf { it.jumlah * it.harga }
-                                val totalItems = itemsInTrx.size
-                                val rawTime = itemsInTrx.firstOrNull()?.waktu ?: ""
-                                val timeDisplay = if (rawTime.contains("T")) {
-                                    rawTime.substringAfter("T").take(5)
-                                } else rawTime.take(5)
-                                
-                                Card(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(bottom = 8.dp)
-                                        .clickable { expandedTrxId = if (expandedTrxId == trxId) null else trxId },
-                                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)),
-                                    shape = RoundedCornerShape(8.dp)
-                                ) {
-                                    Column {
-                                        Row(
-                                            modifier = Modifier.padding(12.dp).fillMaxWidth(),
-                                            horizontalArrangement = Arrangement.SpaceBetween,
-                                            verticalAlignment = Alignment.CenterVertically
+                            AnimatedVisibility(visible = isDateExpanded) {
+                                Column(modifier = Modifier.padding(top = 4.dp)) {
+                                    trxGroup.forEach { (trxId, itemsInTrx) ->
+                                        val totalTrxPrice = itemsInTrx.sumOf { it.jumlah * it.harga }
+                                        val totalItems = itemsInTrx.size
+                                        val rawTime = itemsInTrx.firstOrNull()?.waktu ?: ""
+                                        val timeDisplay = if (rawTime.contains("T")) {
+                                            rawTime.substringAfter("T").take(5)
+                                        } else rawTime.take(5)
+                                        
+                                        Card(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .padding(bottom = 8.dp)
+                                                .clickable { expandedTrxId = if (expandedTrxId == trxId) null else trxId },
+                                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)),
+                                            shape = RoundedCornerShape(8.dp)
                                         ) {
-                                            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
-                                                Box(
-                                                    modifier = Modifier
-                                                        .size(40.dp)
-                                                        .background(MaterialTheme.colorScheme.primary.copy(alpha=0.1f), androidx.compose.foundation.shape.CircleShape),
-                                                    contentAlignment = Alignment.Center
-                                                ) { 
-                                                    Text("🧾", style = MaterialTheme.typography.titleSmall) 
+                                            Column {
+                                                Row(
+                                                    modifier = Modifier.padding(12.dp).fillMaxWidth(),
+                                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                                    verticalAlignment = Alignment.CenterVertically
+                                                ) {
+                                                    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
+                                                        Box(
+                                                            modifier = Modifier
+                                                                .size(40.dp)
+                                                                .background(MaterialTheme.colorScheme.primary.copy(alpha=0.1f), androidx.compose.foundation.shape.CircleShape),
+                                                            contentAlignment = Alignment.Center
+                                                        ) { 
+                                                            Text("🧾", style = MaterialTheme.typography.titleSmall) 
+                                                        }
+                                                        
+                                                        Spacer(modifier = Modifier.width(12.dp))
+                                                        
+                                                        Column {
+                                                            Text(trxId, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)
+                                                            Text("$timeDisplay · $totalItems item", style = MaterialTheme.typography.labelMedium, color = Color.Gray)
+                                                        }
+                                                    }
+                                                    
+                                                    Text(
+                                                        formatRupiah(totalTrxPrice.toLong()), 
+                                                        style = MaterialTheme.typography.bodyMedium, 
+                                                        fontWeight = FontWeight.Bold,
+                                                        color = SuccessColor
+                                                    )
                                                 }
-                                                
-                                                Spacer(modifier = Modifier.width(12.dp))
-                                                
-                                                Column {
-                                                    Text(trxId, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)
-                                                    Text("$timeDisplay · $totalItems item", style = MaterialTheme.typography.labelMedium, color = Color.Gray)
-                                                }
-                                            }
-                                            
-                                            Text(
-                                                formatRupiah(totalTrxPrice.toLong()), 
-                                                style = MaterialTheme.typography.bodyMedium, 
-                                                fontWeight = FontWeight.Bold,
-                                                color = SuccessColor
-                                            )
-                                        }
-                                        if (expandedTrxId == trxId) {
-                                            Divider(
-                                                modifier = Modifier.padding(horizontal = 12.dp),
-                                                color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
-                                            )
-                                            Column(modifier = Modifier.padding(12.dp)) {
-                                                itemsInTrx.forEach { item ->
-                                                    Row(
-                                                        modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
-                                                        horizontalArrangement = Arrangement.SpaceBetween
-                                                    ) {
-                                                        Text(
-                                                            text = "${item.jumlah}x ${item.namaItem}",
-                                                            style = MaterialTheme.typography.bodySmall
-                                                        )
-                                                        Text(
-                                                            text = formatRupiah((item.jumlah * item.harga).toLong()),
-                                                            style = MaterialTheme.typography.bodySmall
-                                                        )
+                                                if (expandedTrxId == trxId) {
+                                                    Divider(
+                                                        modifier = Modifier.padding(horizontal = 12.dp),
+                                                        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
+                                                    )
+                                                    Column(modifier = Modifier.padding(12.dp)) {
+                                                        itemsInTrx.forEach { item ->
+                                                            Row(
+                                                                modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                                                                horizontalArrangement = Arrangement.SpaceBetween
+                                                            ) {
+                                                                Text(
+                                                                    text = "${item.jumlah}x ${item.namaItem}",
+                                                                    style = MaterialTheme.typography.bodySmall
+                                                                )
+                                                                Text(
+                                                                    text = formatRupiah((item.jumlah * item.harga).toLong()),
+                                                                    style = MaterialTheme.typography.bodySmall
+                                                                )
+                                                            }
+                                                        }
                                                     }
                                                 }
                                             }
