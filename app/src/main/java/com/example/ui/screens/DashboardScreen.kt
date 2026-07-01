@@ -2865,11 +2865,11 @@ fun LabaRugiTabContent(
     var showCustomModal by remember { mutableStateOf(false) }
     var activeStartDate by remember { mutableStateOf<java.util.Calendar?>(null) }
     var activeEndDate by remember { mutableStateOf<java.util.Calendar?>(null) }
-    var activeDataType by remember { mutableStateOf("ALL") } // "ALL", "EXPENSE", "INCOME", "DAILY"
+    var activeDataType by remember { mutableStateOf("INCOME") } // "EXPENSE", "INCOME", "DAILY"
 
     var tempStartDate by remember { mutableStateOf<java.util.Calendar?>(null) }
     var tempEndDate by remember { mutableStateOf<java.util.Calendar?>(null) }
-    var tempDataType by remember { mutableStateOf("ALL") }
+    var tempDataType by remember { mutableStateOf("INCOME") }
 
     val todaySdf = remember { java.text.SimpleDateFormat("yyyyMMdd", java.util.Locale.getDefault()) }
     val todayStr = remember { todaySdf.format(java.util.Date()) }
@@ -3109,17 +3109,17 @@ fun LabaRugiTabContent(
     val totalBiaya = filteredBiaya.sumOf { it.jumlah }
     val labaBersih = totalPemasukan - totalBiaya
 
-    val showRekapPerforma = currentDataType != "DAILY"
-    val showTotalPenjualanInRekap = currentDataType == "ALL" || currentDataType == "INCOME"
-    val showTotalPengeluaranInRekap = currentDataType == "ALL" || currentDataType == "EXPENSE"
-    val showLabaBersihInRekap = currentDataType == "ALL"
+    val showRekapPerforma = currentDataType == "ALL" || currentDataType == "EXPENSE" || currentDataType == "DAILY"
+    val showTotalPenjualanInRekap = currentDataType == "ALL" || currentDataType == "DAILY"
+    val showTotalPengeluaranInRekap = currentDataType == "ALL" || currentDataType == "EXPENSE" || currentDataType == "DAILY"
+    val showLabaBersihInRekap = currentDataType == "ALL" || currentDataType == "DAILY"
 
-    val showLaporanBulananItemCard = currentDataType == "ALL" || currentDataType == "INCOME"
+    val showLaporanBulananItemCard = currentDataType == "ALL"
 
-    val showRincianHarianSection = currentDataType == "ALL" || currentDataType == "INCOME" || currentDataType == "DAILY"
+    val showRincianHarianSection = currentDataType == "ALL" || currentDataType == "INCOME"
     val showRincianPengeluaranSection = currentDataType == "ALL" || currentDataType == "EXPENSE"
-    val showDaftarTransaksiPerStrukSection = currentDataType == "ALL" || currentDataType == "INCOME"
-    val showMenuTerlarisSection = currentDataType == "ALL" || currentDataType == "INCOME"
+    val showDaftarTransaksiPerStrukSection = currentDataType == "ALL"
+    val showMenuTerlarisSection = currentDataType == "ALL"
 
     fun formatReadableDate(dateStr: String): String {
         return try {
@@ -3383,7 +3383,6 @@ fun LabaRugiTabContent(
                             Text("Jenis Data", style = MaterialTheme.typography.labelLarge)
                             Spacer(modifier = Modifier.height(8.dp))
                             val options = listOf(
-                                Triple("ALL", "Tampilkan Semua", "Semua data pemasukan dan pengeluaran"),
                                 Triple("EXPENSE", "Pengeluaran Saja", "Hanya data pengeluaran operasional"),
                                 Triple("INCOME", "Pemasukan Saja", "Hanya data penjualan masuk"),
                                 Triple("DAILY", "Rincian Harian Saja", "Hanya rincian transaksi harian")
