@@ -154,8 +154,10 @@ data class TransaksiHarian(
     val orderStatus: String? = null,
     @com.squareup.moshi.Json(name = "customer_name") val customerName: String? = null,
     @com.squareup.moshi.Json(name = "customerName") val customerNameFallback: String? = null,
-    @com.squareup.moshi.Json(name = "servedQty") val servedQty: Int = 0
-
+    @com.squareup.moshi.Json(name = "servedQty") val servedQty: Int = 0,
+    val grandTotal: Double? = null,
+    val discountAmount: Double? = null,
+    val itemDiscount: Double? = null
 ) {
     val metodePembayaran: String?
         get() = payment_method ?: paymentMethod ?: metode_pembayaran ?: metodePembayaranRaw
@@ -501,13 +503,19 @@ fun BerandaTabContent(
         it.idTransaksi.contains(todayIdStr) && (it.orderStatus == "COMPLETED" || it.orderStatus == null)
     }
 
-    // 3. Hitung total pemasukan hari ini dari list yang sudah difilter
-    val totalPenjualanHarian = todayTransaksiList
-        .filter { !it.namaItem.contains("[BATAL]", ignoreCase = true) }
-        .sumOf { it.jumlah * it.harga }
-
     // 4. Update grup transaksi agar juga menggunakan data hari ini saja
     val groupedTransactions = todayTransaksiList.groupBy { it.idTransaksi }
+
+    // 3. Hitung total pemasukan hari ini dari list yang sudah difilter
+    val totalPenjualanHarian = groupedTransactions.values.sumOf { itemsInTrx ->
+        val isCanceledTrx = itemsInTrx.any { it.namaItem.startsWith("❌") } || itemsInTrx.firstOrNull()?.orderStatus == "CANCELLED"
+        if (isCanceledTrx) {
+            0.0
+        } else {
+            val baseItemsTotal = itemsInTrx.sumOf { it.jumlah * it.harga - (it.itemDiscount ?: 0.0) }
+            (baseItemsTotal - (itemsInTrx.firstOrNull()?.discountAmount ?: 0.0)).coerceAtLeast(0.0)
+        }
+    }
 
     val canceledTransactionsCount = groupedTransactions.count { (_, items) -> 
         items.any { it.namaItem.startsWith("❌") } 
@@ -973,9 +981,15 @@ fun PenjualanTabContent(
     }
 
     // 3. Hitung total penjualan harian
-    val totalPenjualanHarian = todayTransaksiList
-        .filter { !it.namaItem.contains("[BATAL]", ignoreCase = true) }
-        .sumOf { it.jumlah * it.harga }
+    val totalPenjualanHarian = todayTransaksiList.groupBy { it.idTransaksi }.values.sumOf { itemsInTrx ->
+        val isCanceledTrx = itemsInTrx.any { it.namaItem.startsWith("❌") } || itemsInTrx.firstOrNull()?.orderStatus == "CANCELLED"
+        if (isCanceledTrx) {
+            0.0
+        } else {
+            val baseItemsTotal = itemsInTrx.sumOf { it.jumlah * it.harga - (it.itemDiscount ?: 0.0) }
+            (baseItemsTotal - (itemsInTrx.firstOrNull()?.discountAmount ?: 0.0)).coerceAtLeast(0.0)
+        }
+    }
 
     Box(modifier = modifier.fillMaxSize()) {
         Column(
@@ -1118,7 +1132,13 @@ fun PenjualanTabContent(
                         transactionsInDate.forEach { (trxId, itemsInTrx) ->
                             item(key = trxId) {
                                 val isExpanded = expandedStates[trxId] ?: false
-                            val totalTrxPrice = itemsInTrx.sumOf { it.jumlah * it.harga }
+                            val isCanceledTrx = itemsInTrx.any { it.namaItem.startsWith("❌") } || itemsInTrx.firstOrNull()?.orderStatus == "CANCELLED"
+                            val totalTrxPrice = if (isCanceledTrx) {
+                                0L
+                            } else {
+                                val baseItemsTotal = itemsInTrx.sumOf { (it.jumlah * it.harga).toLong() - (it.itemDiscount?.toLong() ?: 0L) }
+                                (baseItemsTotal - (itemsInTrx.firstOrNull()?.discountAmount?.toLong() ?: 0L)).coerceAtLeast(0L)
+                            }
                             val totalItems = itemsInTrx.size
                             val orderStatus = itemsInTrx.firstOrNull()?.orderStatus
                             val isCompletedOrNull = orderStatus == "COMPLETED" || orderStatus == null
@@ -1221,7 +1241,15 @@ fun PenjualanTabContent(
                                                     }
                                                     Spacer(modifier = Modifier.width(12.dp))
                                                     Column(modifier = Modifier.weight(1f)) {
-                                                        Text(trxId, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold, color = if (isCanceled) DangerColor else Color.Unspecified)
+                                                        val customer = itemsInTrx.firstOrNull()?.let { it.customerName ?: it.customerNameFallback }?.takeIf { it.isNotBlank() } ?: "Pelanggan"
+                                                        Text(customer, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold, color = if (isCanceled) DangerColor else Color.Unspecified)
+                                                        Text(
+                                                            text = trxId,
+                                                            style = MaterialTheme.typography.labelSmall,
+                                                            color = Color.Gray,
+                                                            maxLines = 1,
+                                                            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+                                                        )
                                                         Text(
                                                             text = "$time · $totalItems item · oleh $cashier",
                                                             style = MaterialTheme.typography.labelMedium,
@@ -1740,28 +1768,26 @@ fun PenjualanTabContent(
                             }
                         }
 
-                        // Menampilkan Diskon dan Total Akhir Transaksi jika ada
-                        val parentTransaction = storageHelper.getNestedTransactions().find { it.kodeTransaksi == item.idTransaksi }
-                        if (parentTransaction != null && parentTransaction.diskonNominal > 0) {
+                        // Menampilkan Diskon dan Total Akhir Transaksi dari API
+                        val trxDiscountAmount = item.discountAmount ?: 0.0
+                        if (trxDiscountAmount > 0) {
                             Divider(modifier = Modifier.padding(vertical = 4.dp))
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
                                 horizontalArrangement = Arrangement.SpaceBetween
                             ) {
-                                val discLabel = if (parentTransaction.diskonPersen > 0) {
-                                    "Diskon Transaksi (${parentTransaction.diskonPersen.toLong()}%)"
-                                } else {
-                                    "Diskon Transaksi"
-                                }
-                                Text(discLabel, style = MaterialTheme.typography.bodyMedium, color = Color.Gray)
-                                Text("-${formatRupiah(parentTransaction.diskonNominal)}", style = MaterialTheme.typography.bodyMedium, color = DangerColor)
+                                Text("Diskon Transaksi", style = MaterialTheme.typography.bodyMedium, color = Color.Gray)
+                                Text("-${formatRupiah(trxDiscountAmount.toLong())}", style = MaterialTheme.typography.bodyMedium, color = DangerColor)
                             }
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
                                 horizontalArrangement = Arrangement.SpaceBetween
                             ) {
                                 Text("Total Akhir Transaksi", style = MaterialTheme.typography.bodyMedium, color = Color.Gray)
-                                Text(formatRupiah(parentTransaction.totalSetelahDiskon), style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold, color = SuccessColor)
+                                val allItems = transaksiList.filter { it.idTransaksi == item.idTransaksi }
+                                val baseTotal = allItems.sumOf { (it.jumlah * it.harga).toLong() - (it.itemDiscount?.toLong() ?: 0L) }
+                                val finalTotal = (baseTotal - trxDiscountAmount.toLong()).coerceAtLeast(0L)
+                                Text(formatRupiah(finalTotal), style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold, color = SuccessColor)
                             }
                         }
                     }
