@@ -29,7 +29,17 @@ fun MonthlyReportScreen(
 
     var monthExpanded by remember { mutableStateOf(false) }
     var itemExpanded by remember { mutableStateOf(false) }
+    var itemSearchQuery by remember { mutableStateOf("") }
     var showRincian by remember(selectedMonth, selectedItemId) { mutableStateOf(false) }
+
+    LaunchedEffect(selectedItemId, allItems) {
+        if (selectedItemId != null) {
+            val name = allItems.find { it.id == selectedItemId }?.name
+            if (name != null && itemSearchQuery != name) {
+                itemSearchQuery = name
+            }
+        }
+    }
 
     val monthNames = DateFormatSymbols().months
 
@@ -93,32 +103,52 @@ fun MonthlyReportScreen(
                     Spacer(modifier = Modifier.height(12.dp))
 
                     // Dropdown Item
+                    val filteredItems = remember(itemSearchQuery, allItems) {
+                        if (itemSearchQuery.length < 3) {
+                            emptyList()
+                        } else {
+                            allItems.filter { it.name.contains(itemSearchQuery, ignoreCase = true) }
+                        }
+                    }
+
                     ExposedDropdownMenuBox(
                         expanded = itemExpanded,
-                        onExpandedChange = { itemExpanded = it }
+                        onExpandedChange = { 
+                            if (it && itemSearchQuery.length >= 3 && filteredItems.isNotEmpty()) {
+                                itemExpanded = true
+                            } else if (!it) {
+                                itemExpanded = false
+                            }
+                        }
                     ) {
-                        val selectedItemName = allItems.find { it.id == selectedItemId }?.name ?: "Pilih Item"
                         OutlinedTextField(
-                            value = selectedItemName,
-                            onValueChange = {},
-                            readOnly = true,
+                            value = itemSearchQuery,
+                            onValueChange = { newValue ->
+                                itemSearchQuery = newValue
+                                itemExpanded = newValue.length >= 3 && allItems.any { it.name.contains(newValue, ignoreCase = true) }
+                            },
                             label = { Text("Pilih Item") },
+                            placeholder = { Text("Ketik min. 3 huruf (cth: kopi)") },
                             trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = itemExpanded) },
                             leadingIcon = { Icon(AppIcons.Product, contentDescription = null) },
-                            modifier = Modifier.menuAnchor(MenuAnchorType.PrimaryNotEditable).fillMaxWidth()
+                            modifier = Modifier.menuAnchor(MenuAnchorType.PrimaryEditable).fillMaxWidth(),
+                            singleLine = true
                         )
-                        ExposedDropdownMenu(
-                            expanded = itemExpanded,
-                            onDismissRequest = { itemExpanded = false }
-                        ) {
-                            allItems.forEach { item ->
-                                DropdownMenuItem(
-                                    text = { Text(item.name) },
-                                    onClick = {
-                                        viewModel.setItem(item.id)
-                                        itemExpanded = false
-                                    }
-                                )
+                        if (filteredItems.isNotEmpty() && itemSearchQuery.length >= 3) {
+                            ExposedDropdownMenu(
+                                expanded = itemExpanded,
+                                onDismissRequest = { itemExpanded = false }
+                            ) {
+                                filteredItems.forEach { item ->
+                                    DropdownMenuItem(
+                                        text = { Text(item.name) },
+                                        onClick = {
+                                            itemSearchQuery = item.name
+                                            viewModel.setItem(item.id)
+                                            itemExpanded = false
+                                        }
+                                    )
+                                }
                             }
                         }
                     }
