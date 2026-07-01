@@ -3106,7 +3106,16 @@ fun LabaRugiTabContent(
 
     val totalPemasukan = filteredTransactions
         .filter { !it.namaItem.contains("[BATAL]", ignoreCase = true) }
-        .sumOf { it.jumlah * it.harga }
+        .groupBy { it.idTransaksi }
+        .values.sumOf { itemsInTrx ->
+            val isCanceledTrx = itemsInTrx.any { it.namaItem.startsWith("❌") } || itemsInTrx.firstOrNull()?.orderStatus == "CANCELLED"
+            if (isCanceledTrx) {
+                0.0
+            } else {
+                val baseItemsTotal = itemsInTrx.sumOf { it.jumlah * it.harga - (it.itemDiscount ?: 0.0) }
+                (baseItemsTotal - (itemsInTrx.firstOrNull()?.discountAmount ?: 0.0)).coerceAtLeast(0.0)
+            }
+        }
     val totalBiaya = filteredBiaya.sumOf { it.jumlah }
     val labaBersih = totalPemasukan - totalBiaya
 
@@ -3152,13 +3161,13 @@ fun LabaRugiTabContent(
             .groupBy { it.id } // Grouping by Product ID instead of Name
             .map { (productId, items) ->
                 val totalQty = items.sumOf { it.jumlah }
-                val totalRevenue = items.sumOf { it.jumlah * it.harga }
+                val totalRevenue = items.sumOf { it.jumlah * it.harga - (it.itemDiscount ?: 0.0) }
                 // Get clean name from menuList if available, otherwise use the one from transaction
                 val originalName = menuList.find { it.id == productId }?.nama ?: items.first().namaItem
                 originalName to Pair(totalQty, totalRevenue)
             }
+            .filter { it.second.first >= 1 }
             .sortedByDescending { it.second.first }
-            .take(15)
             .mapIndexed { index, pair ->
                 MenuTerlaris(
                     namaBarang = pair.first,
@@ -3545,7 +3554,15 @@ fun LabaRugiTabContent(
                         )
                     } else {
                         transactionsByDate.forEachIndexed { index, (tanggal, trxGroup) ->
-                            val dailyTotalRevenue = trxGroup.values.flatten().sumOf { it.jumlah * it.harga }.toLong()
+                            val dailyTotalRevenue = trxGroup.values.sumOf { itemsInTrx ->
+                                val isCanceledTrx = itemsInTrx.any { it.namaItem.startsWith("❌") } || itemsInTrx.firstOrNull()?.orderStatus == "CANCELLED"
+                                if (isCanceledTrx) {
+                                    0.0
+                                } else {
+                                    val baseItemsTotal = itemsInTrx.sumOf { it.jumlah * it.harga - (it.itemDiscount ?: 0.0) }
+                                    (baseItemsTotal - (itemsInTrx.firstOrNull()?.discountAmount ?: 0.0)).coerceAtLeast(0.0)
+                                }
+                            }.toLong()
                             val isDateExpanded = expandedDates.contains(tanggal)
                             
                             Row(
@@ -3588,7 +3605,13 @@ fun LabaRugiTabContent(
                             AnimatedVisibility(visible = isDateExpanded) {
                                 Column(modifier = Modifier.padding(top = 4.dp)) {
                                     trxGroup.forEach { (trxId, itemsInTrx) ->
-                                        val totalTrxPrice = itemsInTrx.sumOf { it.jumlah * it.harga }
+                                        val isCanceledTrx = itemsInTrx.any { it.namaItem.startsWith("❌") } || itemsInTrx.firstOrNull()?.orderStatus == "CANCELLED"
+                                        val totalTrxPrice = if (isCanceledTrx) {
+                                            0.0
+                                        } else {
+                                            val baseItemsTotal = itemsInTrx.sumOf { it.jumlah * it.harga - (it.itemDiscount ?: 0.0) }
+                                            (baseItemsTotal - (itemsInTrx.firstOrNull()?.discountAmount ?: 0.0)).coerceAtLeast(0.0)
+                                        }
                                         val totalItems = itemsInTrx.size
                                         val rawTime = itemsInTrx.firstOrNull()?.waktu ?: ""
                                         val timeDisplay = if (rawTime.contains("T")) {
@@ -3641,17 +3664,48 @@ fun LabaRugiTabContent(
                                                     )
                                                     Column(modifier = Modifier.padding(12.dp)) {
                                                         itemsInTrx.forEach { item ->
+                                                            val itemNetPrice = (item.jumlah * item.harga) - (item.itemDiscount ?: 0.0)
+                                                            Row(
+                                                                modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                                                                horizontalArrangement = Arrangement.SpaceBetween
+                                                            ) {
+                                                                Column {
+                                                                    Text(
+                                                                        text = "${item.jumlah}x ${item.namaItem}",
+                                                                        style = MaterialTheme.typography.bodySmall
+                                                                    )
+                                                                    if (item.itemDiscount != null && item.itemDiscount > 0) {
+                                                                        Text(
+                                                                            text = "  Diskon: -${formatRupiah(item.itemDiscount.toLong())}",
+                                                                            style = MaterialTheme.typography.labelSmall,
+                                                                            color = DangerColor
+                                                                        )
+                                                                    }
+                                                                }
+                                                                Text(
+                                                                    text = formatRupiah(itemNetPrice.toLong()),
+                                                                    style = MaterialTheme.typography.bodySmall
+                                                                )
+                                                            }
+                                                        }
+                                                        val discountAmount = itemsInTrx.firstOrNull()?.discountAmount ?: 0.0
+                                                        if (discountAmount > 0) {
+                                                            Divider(modifier = Modifier.padding(vertical = 4.dp))
                                                             Row(
                                                                 modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
                                                                 horizontalArrangement = Arrangement.SpaceBetween
                                                             ) {
                                                                 Text(
-                                                                    text = "${item.jumlah}x ${item.namaItem}",
-                                                                    style = MaterialTheme.typography.bodySmall
+                                                                    text = "Diskon Transaksi",
+                                                                    style = MaterialTheme.typography.bodySmall,
+                                                                    fontWeight = FontWeight.Bold,
+                                                                    color = DangerColor
                                                                 )
                                                                 Text(
-                                                                    text = formatRupiah((item.jumlah * item.harga).toLong()),
-                                                                    style = MaterialTheme.typography.bodySmall
+                                                                    text = "-${formatRupiah(discountAmount.toLong())}",
+                                                                    style = MaterialTheme.typography.bodySmall,
+                                                                    fontWeight = FontWeight.Bold,
+                                                                    color = DangerColor
                                                                 )
                                                             }
                                                         }
@@ -3749,8 +3803,13 @@ fun LabaRugiTabContent(
                         val trxKeys = groupedTransactions.keys.toList()
                         trxKeys.forEachIndexed { index, trxId ->
                             val items = groupedTransactions[trxId] ?: emptyList()
-                            val totalHarga = items.sumOf { it.jumlah * it.harga }
-                            val isCanceled = items.any { it.namaItem.startsWith("❌") }
+                            val isCanceled = items.any { it.namaItem.startsWith("❌") } || items.firstOrNull()?.orderStatus == "CANCELLED"
+                            val totalHarga = if (isCanceled) {
+                                items.sumOf { it.jumlah * it.harga }
+                            } else {
+                                val baseItemsTotal = items.sumOf { it.jumlah * it.harga - (it.itemDiscount ?: 0.0) }
+                                (baseItemsTotal - (items.firstOrNull()?.discountAmount ?: 0.0)).coerceAtLeast(0.0)
+                            }
 
                             Row(
                                 modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),

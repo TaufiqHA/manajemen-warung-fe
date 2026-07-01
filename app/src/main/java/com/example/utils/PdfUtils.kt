@@ -225,7 +225,17 @@ fun generateLabaRugiPdf(context: Context, transaksiList: List<TransaksiHarian>, 
     document.add(Paragraph("\n"))
 
     // Financial Agregates Table
-    val totalPemasukan = transaksiList.sumOf { it.jumlah * it.harga }
+    val totalPemasukan = transaksiList
+        .groupBy { it.idTransaksi }
+        .values.sumOf { itemsInTrx ->
+            val isCanceledTrx = itemsInTrx.any { it.namaItem.startsWith("❌") } || itemsInTrx.firstOrNull()?.orderStatus == "CANCELLED"
+            if (isCanceledTrx) {
+                0.0
+            } else {
+                val baseItemsTotal = itemsInTrx.sumOf { it.jumlah * it.harga - (it.itemDiscount ?: 0.0) }
+                (baseItemsTotal - (itemsInTrx.firstOrNull()?.discountAmount ?: 0.0)).coerceAtLeast(0.0)
+            }
+        }
     val totalPengeluaran = biayaList.sumOf { it.jumlah }
     val labaBersih = totalPemasukan - totalPengeluaran
 
@@ -251,12 +261,30 @@ fun generateLabaRugiPdf(context: Context, transaksiList: List<TransaksiHarian>, 
     trxHeaders.forEach { h ->
         trxTable.addHeaderCell(Cell().add(Paragraph(h).setBold().setTextAlignment(TextAlignment.CENTER)))
     }
-    transaksiList.forEach { item ->
-        trxTable.addCell(Cell().add(Paragraph(item.idTransaksi).setFontSize(9f)))
-        trxTable.addCell(Cell().add(Paragraph(item.waktu).setFontSize(9f)))
-        trxTable.addCell(Cell().add(Paragraph(item.namaItem).setFontSize(9f)))
-        trxTable.addCell(Cell().add(Paragraph(item.jumlah.toString()).setTextAlignment(TextAlignment.CENTER).setFontSize(9f)))
-        trxTable.addCell(Cell().add(Paragraph(formatRupiah(item.jumlah * item.harga)).setTextAlignment(TextAlignment.RIGHT).setFontSize(9f)))
+    
+    val grouped = transaksiList.groupBy { it.idTransaksi }
+    grouped.forEach { (idTransaksi, itemsInTrx) ->
+        val firstItem = itemsInTrx.firstOrNull()
+        val isCanceledTrx = itemsInTrx.any { it.namaItem.startsWith("❌") } || firstItem?.orderStatus == "CANCELLED"
+        
+        if (!isCanceledTrx) {
+            itemsInTrx.forEach { item ->
+                val itemNetPrice = item.jumlah * item.harga - (item.itemDiscount ?: 0.0)
+                trxTable.addCell(Cell().add(Paragraph(item.idTransaksi).setFontSize(9f)))
+                trxTable.addCell(Cell().add(Paragraph(item.waktu).setFontSize(9f)))
+                trxTable.addCell(Cell().add(Paragraph(item.namaItem).setFontSize(9f)))
+                trxTable.addCell(Cell().add(Paragraph(item.jumlah.toString()).setTextAlignment(TextAlignment.CENTER).setFontSize(9f)))
+                trxTable.addCell(Cell().add(Paragraph(formatRupiah(itemNetPrice)).setTextAlignment(TextAlignment.RIGHT).setFontSize(9f)))
+            }
+            val discountAmount = firstItem?.discountAmount ?: 0.0
+            if (discountAmount > 0) {
+                trxTable.addCell(Cell().add(Paragraph(idTransaksi).setFontSize(9f)))
+                trxTable.addCell(Cell().add(Paragraph(firstItem?.waktu ?: "").setFontSize(9f)))
+                trxTable.addCell(Cell().add(Paragraph("Diskon Transaksi").setFontSize(9f).setItalic()))
+                trxTable.addCell(Cell().add(Paragraph("-").setTextAlignment(TextAlignment.CENTER).setFontSize(9f)))
+                trxTable.addCell(Cell().add(Paragraph(formatRupiah(-discountAmount)).setTextAlignment(TextAlignment.RIGHT).setFontSize(9f)))
+            }
+        }
     }
     document.add(trxTable)
     

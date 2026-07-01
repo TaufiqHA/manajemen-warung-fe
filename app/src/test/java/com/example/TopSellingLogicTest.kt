@@ -32,8 +32,8 @@ class TopSellingLogicTest {
                 val originalName = menuList.find { it.id == productId }?.nama ?: items.first().namaItem
                 originalName to Pair(totalQty, totalRevenue)
             }
+            .filter { it.second.first >= 1 }
             .sortedByDescending { it.second.first }
-            .take(15)
             .mapIndexed { index, pair ->
                 MenuTerlaris(
                     namaBarang = pair.first,
