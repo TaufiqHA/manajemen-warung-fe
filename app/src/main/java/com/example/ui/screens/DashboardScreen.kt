@@ -3119,14 +3119,14 @@ fun LabaRugiTabContent(
     val totalBiaya = filteredBiaya.sumOf { it.jumlah }
     val labaBersih = totalPemasukan - totalBiaya
 
-    val showRekapPerforma = currentDataType == "ALL" || currentDataType == "ALL_NO_DAILY" || currentDataType == "EXPENSE" || currentDataType == "DAILY"
-    val showTotalPenjualanInRekap = currentDataType == "ALL" || currentDataType == "ALL_NO_DAILY" || currentDataType == "DAILY"
+    val showRekapPerforma = currentDataType == "ALL" || currentDataType == "ALL_NO_DAILY" || currentDataType == "EXPENSE" || currentDataType == "DAILY" || currentDataType == "INCOME"
+    val showTotalPenjualanInRekap = currentDataType == "ALL" || currentDataType == "ALL_NO_DAILY" || currentDataType == "DAILY" || currentDataType == "INCOME"
     val showTotalPengeluaranInRekap = currentDataType == "ALL" || currentDataType == "ALL_NO_DAILY" || currentDataType == "EXPENSE" || currentDataType == "DAILY"
     val showLabaBersihInRekap = currentDataType == "ALL" || currentDataType == "ALL_NO_DAILY" || currentDataType == "DAILY"
 
     val showLaporanBulananItemCard = currentDataType == "ALL" || currentDataType == "ALL_NO_DAILY"
 
-    val showRincianHarianSection = currentDataType == "ALL" || currentDataType == "INCOME"
+    val showRincianHarianSection = currentDataType == "ALL" || currentDataType == "ALL_NO_DAILY"
     val showRincianPengeluaranSection = currentDataType == "ALL" || currentDataType == "ALL_NO_DAILY" || currentDataType == "EXPENSE"
     val showDaftarTransaksiPerStrukSection = currentDataType == "ALL"
     val showMenuTerlarisSection = currentDataType == "ALL" || currentDataType == "ALL_NO_DAILY" || currentDataType == "TOP_SELLING"
@@ -3393,9 +3393,9 @@ fun LabaRugiTabContent(
                             Text("Jenis Data", style = MaterialTheme.typography.labelLarge)
                             Spacer(modifier = Modifier.height(8.dp))
                             val options = listOf(
-                                Triple("ALL_NO_DAILY", "Tampilkan Semua", "Tampilkan semua tapi kecuali rincian harian"),
+                                Triple("ALL_NO_DAILY", "Tampilkan Semua", "Tampilkan semua data termasuk rincian harian"),
                                 Triple("EXPENSE", "Pengeluaran Saja", "Hanya data pengeluaran operasional"),
-                                Triple("INCOME", "Pemasukan Saja", "Hanya data penjualan masuk"),
+                                Triple("INCOME", "Pemasukan Saja", "Hanya rekap data penjualan masuk"),
                                 Triple("DAILY", "Laba Rugi Saja", "Hanya rincian transaksi harian"),
                                 Triple("TOP_SELLING", "Rincian Menu Terlaris", "Hanya data menu terlaris berdasarkan tanggal")
                             )
