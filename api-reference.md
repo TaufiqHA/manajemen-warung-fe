@@ -101,7 +101,6 @@ Mengambil semua daftar barang jualan/menu aktif.
         "name": "Es Teh Manis",
         "category": "Minuman",
         "price": 5000.0,
-        "stock": 100,
         "imageUrl": "https://api.warung.com/images/esteh.png"
       },
       {
@@ -109,7 +108,6 @@ Mengambil semua daftar barang jualan/menu aktif.
         "name": "Nasi Goreng Spesial",
         "category": "Makanan",
         "price": 15000.0,
-        "stock": 50,
         "imageUrl": "https://api.warung.com/images/nasgor.png"
       }
     ]
@@ -128,7 +126,6 @@ Menambahkan barang jualan baru ke sistem.
     "name": "Ayam Geprek",
     "category": "Makanan",
     "price": 13000.0,
-    "stock": 40,
     "imageUrl": "https://api.warung.com/images/ayamgeprek.png"
   }
   ```
@@ -142,7 +139,6 @@ Menambahkan barang jualan baru ke sistem.
       "name": "Ayam Geprek",
       "category": "Makanan",
       "price": 13000.0,
-      "stock": 40,
       "imageUrl": "https://api.warung.com/images/ayamgeprek.png"
     }
   }
@@ -160,7 +156,6 @@ Memperbarui informasi barang jualan yang sudah ada berdasarkan `id`.
     "name": "Ayam Geprek Sambal Ijo",
     "category": "Makanan",
     "price": 14000.0,
-    "stock": 45,
     "imageUrl": "https://api.warung.com/images/ayamgeprek_ijo.png"
   }
   ```
@@ -174,7 +169,6 @@ Memperbarui informasi barang jualan yang sudah ada berdasarkan `id`.
       "name": "Ayam Geprek Sambal Ijo",
       "category": "Makanan",
       "price": 14000.0,
-      "stock": 45,
       "imageUrl": "https://api.warung.com/images/ayamgeprek_ijo.png"
     }
   }

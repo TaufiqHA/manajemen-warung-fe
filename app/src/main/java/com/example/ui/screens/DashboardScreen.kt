@@ -134,7 +134,6 @@ data class MenuItem(
     val id: String,
     @com.squareup.moshi.Json(name = "name") val nama: String,
     @com.squareup.moshi.Json(name = "price") val harga: Double,
-    @com.squareup.moshi.Json(name = "stock") val stock: Int = 100,
     @com.squareup.moshi.Json(name = "category") val kategori: String = "Lainnya"
 )
 
@@ -4194,7 +4193,7 @@ fun BarangTabContent(
                             if (namaMenu.isNotBlank() && h > 0) {
                                 isAddingMenu = true
                                 val newKategori = if (kategoriMenu.isNotBlank()) kategoriMenu else "Lainnya"
-                                val newMenuItem = MenuItem(java.util.UUID.randomUUID().toString(), namaMenu, h, 100, newKategori)
+                                val newMenuItem = MenuItem(java.util.UUID.randomUUID().toString(), namaMenu, h, newKategori)
                                 coroutineScope.launch {
                                     try {
                                         val response = com.example.data.api.RetrofitClient.getProductApiService(mContext).addProduct(newMenuItem)
