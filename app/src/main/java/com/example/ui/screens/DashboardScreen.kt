@@ -101,7 +101,7 @@ val allMenus = listOf(
         title = "Penjualan",
         icon = AppIcons.Transaction,
         tab = DashboardTab.Penjualan,
-        allowedRoles = listOf(UserRole.ADMIN_TOKO)
+        allowedRoles = listOf(UserRole.ADMIN_TOKO, UserRole.OWNER)
     ),
     DashboardMenu(
         title = "Barang",
@@ -1189,6 +1189,8 @@ fun PenjualanTabContent(
                             SwipeToDismissBox(
                                 state = dismissState,
                                 modifier = Modifier.fillMaxWidth().wrapContentHeight(),
+                                enableDismissFromEndToStart = role == UserRole.OWNER.displayName,
+                                enableDismissFromStartToEnd = false,
                                 backgroundContent = {
                                     val color by animateColorAsState(
                                         when (dismissState.targetValue) {
@@ -1333,14 +1335,16 @@ fun PenjualanTabContent(
         }
 
         // Floating Action Button
-        FloatingActionButton(
-            onClick = { showActionChooser = true },
-            modifier = Modifier
-                .align(Alignment.BottomEnd)
-                .padding(24.dp),
-            containerColor = MaterialTheme.colorScheme.primary
-        ) {
-            Icon(AppIcons.Add, contentDescription = "Tambah", tint = Color.White)
+        if (role != UserRole.OWNER.displayName) {
+            FloatingActionButton(
+                onClick = { showActionChooser = true },
+                modifier = Modifier
+                    .align(Alignment.BottomEnd)
+                    .padding(24.dp),
+                containerColor = MaterialTheme.colorScheme.primary
+            ) {
+                Icon(AppIcons.Add, contentDescription = "Tambah", tint = Color.White)
+            }
         }
 
         if (showActionChooser) {
@@ -1868,7 +1872,7 @@ fun PenjualanTabContent(
                     }
                 },
                 dismissButton = {
-                    if (!item.namaItem.startsWith("❌")) {
+                    if (!item.namaItem.startsWith("❌") && role == UserRole.OWNER.displayName) {
                         TextButton(
                             onClick = {
                                 showCancelConfirmation = item

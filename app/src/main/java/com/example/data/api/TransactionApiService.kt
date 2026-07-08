@@ -56,10 +56,10 @@ interface TransactionApiService {
         @Body request: Map<String, Int>
     ): Response<BaseResponse<Any>>
 
-    /**
-     * Endpoint untuk menghapus transaksi permanen.
-     * Hanya pengguna dengan role ADMIN_TOKO yang diizinkan (ditangani server).
-     */
+     /**
+      * Endpoint untuk menghapus transaksi permanen.
+      * Hanya pengguna dengan role OWNER yang diizinkan (ditangani server).
+      */
     @DELETE("api/v1/transactions/{id}")
     suspend fun deleteTransaction(
         @Path("id") transactionId: String
