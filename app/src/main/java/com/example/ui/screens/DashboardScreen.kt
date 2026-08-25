@@ -769,6 +769,66 @@ fun PenjualanTabContent(
         }
     }
 
+    // Fungsi helper untuk memeriksa apakah transaksi terjadi hari ini atau kemarin
+    fun isTodayOrYesterday(idTransaksi: String, waktu: String): Boolean {
+        val cal = java.util.Calendar.getInstance()
+        val todayYear = cal.get(java.util.Calendar.YEAR)
+        val todayDayOfYear = cal.get(java.util.Calendar.DAY_OF_YEAR)
+
+        cal.add(java.util.Calendar.DAY_OF_YEAR, -1)
+        val yesterdayYear = cal.get(java.util.Calendar.YEAR)
+        val yesterdayDayOfYear = cal.get(java.util.Calendar.DAY_OF_YEAR)
+
+        // 1. Coba parse dari string waktu ISO / format tanggal
+        if (waktu.isNotBlank()) {
+            try {
+                val cleanTime = if (waktu.length >= 19) waktu.substring(0, 19) else waktu
+                val parsedDate = if (cleanTime.contains("T")) {
+                    val parser = java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss", java.util.Locale.getDefault()).apply {
+                        timeZone = java.util.TimeZone.getTimeZone("UTC")
+                    }
+                    parser.parse(cleanTime)
+                } else if (cleanTime.contains("-") && cleanTime.length >= 10) {
+                    val parser = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.getDefault())
+                    parser.parse(cleanTime.substring(0, 10))
+                } else if (cleanTime.length == 8 && cleanTime.all { it.isDigit() }) {
+                    val parser = java.text.SimpleDateFormat("yyyyMMdd", java.util.Locale.getDefault())
+                    parser.parse(cleanTime)
+                } else null
+
+                if (parsedDate != null) {
+                    val trxCal = java.util.Calendar.getInstance().apply { time = parsedDate }
+                    val y = trxCal.get(java.util.Calendar.YEAR)
+                    val d = trxCal.get(java.util.Calendar.DAY_OF_YEAR)
+                    if ((y == todayYear && d == todayDayOfYear) || (y == yesterdayYear && d == yesterdayDayOfYear)) {
+                        return true
+                    }
+                }
+            } catch (e: Exception) {
+                // Abaikan jika error parsing
+            }
+        }
+
+        // 2. Fallback via format kode transaksi idTransaksi (TRX-yyyyMMdd...)
+        if (idTransaksi.startsWith("TRX-") && idTransaksi.length >= 12) {
+            val dateStr = idTransaksi.substring(4, 12)
+            try {
+                val sdf = java.text.SimpleDateFormat("yyyyMMdd", java.util.Locale.getDefault())
+                val d = sdf.parse(dateStr)
+                if (d != null) {
+                    val trxCal = java.util.Calendar.getInstance().apply { time = d }
+                    val y = trxCal.get(java.util.Calendar.YEAR)
+                    val dDay = trxCal.get(java.util.Calendar.DAY_OF_YEAR)
+                    if ((y == todayYear && dDay == todayDayOfYear) || (y == yesterdayYear && dDay == yesterdayDayOfYear)) {
+                        return true
+                    }
+                }
+            } catch (e: Exception) {}
+        }
+
+        return false
+    }
+
     // 1. Dapatkan string tanggal hari ini dengan format yyyyMMdd (sesuai format idTransaksi)
     val todayIdStr = java.text.SimpleDateFormat("yyyyMMdd", java.util.Locale.getDefault()).format(java.util.Date())
 
@@ -864,15 +924,22 @@ fun PenjualanTabContent(
 
             Spacer(modifier = Modifier.height(12.dp))
             Text(
-                text = "DAFTAR TRANSAKSI",
+                text = "DAFTAR TRANSAKSI (HARI INI & KEMARIN)",
                 style = MaterialTheme.typography.titleSmall,
                 fontWeight = FontWeight.Bold
             )
             Spacer(modifier = Modifier.height(8.dp))
 
+            // Filter transaksi agar hanya menampilkan transaksi hari ini dan kemarin pada akun admin
+            val recentTransaksiList = remember(transaksiList.toList()) {
+                transaksiList.filter { trx ->
+                    isTodayOrYesterday(trx.idTransaksi, trx.waktu)
+                }
+            }
+
             // Grouping: Pertama gabungkan item per struk (idTransaksi), lalu urutkan dari yang terbaru, lalu group berdasarkan Tanggal
-            val groupedByDate = remember(transaksiList.toList()) {
-                val trxsById = transaksiList.groupBy { it.idTransaksi }
+            val groupedByDate = remember(recentTransaksiList) {
+                val trxsById = recentTransaksiList.groupBy { it.idTransaksi }
                 trxsById.entries
                     .sortedByDescending { it.value.firstOrNull()?.waktu ?: "" }
                     .groupBy { entry -> 
@@ -883,8 +950,8 @@ fun PenjualanTabContent(
             
             val expandedStates = remember { mutableStateMapOf<String, Boolean>() }
 
-            // Pengecekan kondisi kosong dikembalikan ke transaksiList keseluruhan
-            if (transaksiList.isEmpty()) {
+            // Pengecekan kondisi kosong untuk transaksi hari ini & kemarin
+            if (recentTransaksiList.isEmpty()) {
                 Box(
                     modifier = Modifier
                         .weight(1f)
@@ -895,7 +962,7 @@ fun PenjualanTabContent(
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
                         Icon(AppIcons.Store, contentDescription = null, modifier = Modifier.size(64.dp), tint = Color.LightGray)
                         Spacer(modifier = Modifier.height(12.dp))
-                        Text("Belum ada transaksi hari ini", style = MaterialTheme.typography.bodyMedium, color = Color.Gray)
+                        Text("Belum ada transaksi hari ini atau kemarin", style = MaterialTheme.typography.bodyMedium, color = Color.Gray)
                     }
                 }
             } else {
