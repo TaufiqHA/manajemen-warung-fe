@@ -25,9 +25,9 @@ object PrinterHelper {
             val alignLeftCommand = byteArrayOf(0x1B, 0x61, 0x00)
             outputStream.write(alignLeftCommand)
 
-            // 3. Pastikan format baris baru dikenali printer (CRLF) lalu kirim
-            val formattedText = receiptText.replace("\n", "\r\n")
-            outputStream.write(formattedText.toByteArray())
+            // 3. Pastikan format baris baru dikenali printer (CRLF) lalu kirim per baris
+            val formattedText = receiptText.replace("\r\n", "\n").replace("\n", "\r\n")
+            outputStream.write(formattedText.toByteArray(Charsets.UTF_8))
             
             // 4. Tambahkan line feed (baris baru) yang cukup di akhir agar kertas bisa disobek
             val feedCommand = byteArrayOf(0x0A, 0x0A, 0x0A, 0x0A)
@@ -35,9 +35,11 @@ object PrinterHelper {
             
             outputStream.flush()
             
-            // Tambahkan jeda waktu agar printer sempat memproses buffer sebelum socket ditutup
+            // Tambahkan jeda waktu dinamis berdasarkan jumlah baris agar buffer printer selesai mencetak sebelum socket ditutup
+            val lineCount = formattedText.lines().size
+            val sleepMs = maxOf(2500L, lineCount * 120L)
             try {
-                Thread.sleep(1500)
+                Thread.sleep(sleepMs)
             } catch (e: InterruptedException) {
                 e.printStackTrace()
             }
@@ -69,8 +71,8 @@ object PrinterHelper {
             outputStream.write(alignLeftCommand)
 
             // 3. Pastikan format baris baru dikenali printer (CRLF) lalu kirim
-            val formattedText = receiptText.replace("\n", "\r\n")
-            outputStream.write(formattedText.toByteArray())
+            val formattedText = receiptText.replace("\r\n", "\n").replace("\n", "\r\n")
+            outputStream.write(formattedText.toByteArray(Charsets.UTF_8))
             
             // 4. Tambahkan line feed (baris baru) yang cukup di akhir agar kertas bisa disobek
             val feedCommand = byteArrayOf(0x0A, 0x0A, 0x0A, 0x0A)

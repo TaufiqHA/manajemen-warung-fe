@@ -150,6 +150,9 @@ class LocalStorageHelper(private val context: Context) {
     }
 
     fun addTransaction(transaction: Transaction, paymentMethod: String = "Cash") {
+        // Daftarkan sebagai orderan yang sedang aktif/berjalan
+        addActiveOrderId(transaction.kodeTransaksi)
+
         // 1. Add to nested transactions
         val currentNested = getNestedTransactions().toMutableList()
         currentNested.add(transaction)
@@ -226,6 +229,65 @@ class LocalStorageHelper(private val context: Context) {
                 }
             }
         }
+    }
+
+    fun getActiveOrderIds(): Set<String> {
+        return prefs.getStringSet("active_order_ids", emptySet()) ?: emptySet()
+    }
+
+    fun addActiveOrderId(trxId: String) {
+        val current = getActiveOrderIds().toMutableSet()
+        current.add(trxId)
+        prefs.edit().putStringSet("active_order_ids", current).apply()
+    }
+
+    fun removeActiveOrderId(trxId: String) {
+        val current = getActiveOrderIds().toMutableSet()
+        current.remove(trxId)
+        prefs.edit().putStringSet("active_order_ids", current).apply()
+    }
+
+    fun getCompletedOrderIds(): Set<String> {
+        return prefs.getStringSet("completed_order_ids", emptySet()) ?: emptySet()
+    }
+
+    fun markOrderCompleted(trxId: String) {
+        val current = getCompletedOrderIds().toMutableSet()
+        current.add(trxId)
+        prefs.edit().putStringSet("completed_order_ids", current).apply()
+        removeActiveOrderId(trxId)
+    }
+
+    fun getOrderItemProgress(key: String): Int {
+        return prefs.getInt("item_progress_$key", 0)
+    }
+
+    fun setOrderItemProgress(key: String, qty: Int) {
+        prefs.edit().putInt("item_progress_$key", qty).apply()
+    }
+
+    fun getCompletedOrderItemKeys(): Set<String> {
+        return prefs.getStringSet("completed_order_item_keys", emptySet()) ?: emptySet()
+    }
+
+    fun setOrderItemCompleted(key: String, isCompleted: Boolean) {
+        val current = getCompletedOrderItemKeys().toMutableSet()
+        if (isCompleted) {
+            current.add(key)
+        } else {
+            current.remove(key)
+        }
+        prefs.edit().putStringSet("completed_order_item_keys", current).apply()
+    }
+
+    fun setOrderAllItemsCompleted(keys: List<String>, isCompleted: Boolean) {
+        val current = getCompletedOrderItemKeys().toMutableSet()
+        if (isCompleted) {
+            current.addAll(keys)
+        } else {
+            current.removeAll(keys)
+        }
+        prefs.edit().putStringSet("completed_order_item_keys", current).apply()
     }
 
     private fun getDefaultMenuList(): List<MenuItem> {

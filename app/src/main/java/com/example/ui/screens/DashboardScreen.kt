@@ -24,6 +24,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.launch
@@ -42,7 +43,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.Refresh
-import androidx.compose.material.icons.filled.Check
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.ui.viewmodel.SalesViewModel
 import android.bluetooth.BluetoothAdapter
@@ -101,7 +101,7 @@ val allMenus = listOf(
         title = "Penjualan",
         icon = AppIcons.Transaction,
         tab = DashboardTab.Penjualan,
-        allowedRoles = listOf(UserRole.ADMIN_TOKO)
+        allowedRoles = listOf(UserRole.ADMIN_TOKO, UserRole.OWNER)
     ),
     DashboardMenu(
         title = "Barang",
@@ -158,6 +158,97 @@ data class BiayaOperasional(
     val tanggal: String,
     val pembuat: String
 )
+
+fun parseTrxDate(idTransaksi: String, waktu: String = ""): java.util.Calendar? {
+    if (waktu.isNotBlank()) {
+        try {
+            val cleanTime = if (waktu.length >= 19) waktu.substring(0, 19) else waktu
+            if (cleanTime.contains("T")) {
+                val parser = java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss", java.util.Locale.getDefault()).apply {
+                    timeZone = java.util.TimeZone.getTimeZone("UTC")
+                }
+                val date = parser.parse(cleanTime)
+                if (date != null) {
+                    val cal = java.util.Calendar.getInstance()
+                    cal.time = date
+                    return cal
+                }
+            } else if (cleanTime.contains("-") && cleanTime.length >= 19) {
+                val parser = java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss", java.util.Locale.getDefault())
+                val date = parser.parse(cleanTime)
+                if (date != null) {
+                    val cal = java.util.Calendar.getInstance()
+                    cal.time = date
+                    return cal
+                }
+            } else if (cleanTime.contains("-") && cleanTime.length >= 10) {
+                val parser = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.getDefault())
+                val date = parser.parse(cleanTime.substring(0, 10))
+                if (date != null) {
+                    val cal = java.util.Calendar.getInstance()
+                    cal.time = date
+                    return cal
+                }
+            } else if (cleanTime.length == 8 && cleanTime.all { it.isDigit() }) {
+                val parser = java.text.SimpleDateFormat("yyyyMMdd", java.util.Locale.getDefault())
+                val date = parser.parse(cleanTime)
+                if (date != null) {
+                    val cal = java.util.Calendar.getInstance()
+                    cal.time = date
+                    return cal
+                }
+            }
+        } catch (e: Exception) {}
+    }
+
+    if (idTransaksi.startsWith("TRX-") && idTransaksi.length >= 12) {
+        val dateStr = idTransaksi.substring(4, 12)
+        try {
+            val sdf = java.text.SimpleDateFormat("yyyyMMdd", java.util.Locale.getDefault())
+            val d = sdf.parse(dateStr)
+            if (d != null) {
+                val cal = java.util.Calendar.getInstance()
+                cal.time = d
+                return cal
+            }
+        } catch (e: Exception) {}
+    } else if (idTransaksi.length >= 8 && idTransaksi.take(8).all { it.isDigit() }) {
+        try {
+            val sdf = java.text.SimpleDateFormat("yyyyMMdd", java.util.Locale.getDefault())
+            val d = sdf.parse(idTransaksi.take(8))
+            if (d != null) {
+                val cal = java.util.Calendar.getInstance()
+                cal.time = d
+                return cal
+            }
+        } catch (e: Exception) {}
+    }
+
+    return null
+}
+
+fun isTrxToday(idTransaksi: String, waktu: String = ""): Boolean {
+    val trxCal = parseTrxDate(idTransaksi, waktu) ?: return false
+    val todayCal = java.util.Calendar.getInstance()
+    return trxCal.get(java.util.Calendar.YEAR) == todayCal.get(java.util.Calendar.YEAR) &&
+           trxCal.get(java.util.Calendar.DAY_OF_YEAR) == todayCal.get(java.util.Calendar.DAY_OF_YEAR)
+}
+
+fun isTrxTodayOrYesterday(idTransaksi: String, waktu: String = ""): Boolean {
+    val trxCal = parseTrxDate(idTransaksi, waktu) ?: return false
+    val cal = java.util.Calendar.getInstance()
+    val todayYear = cal.get(java.util.Calendar.YEAR)
+    val todayDayOfYear = cal.get(java.util.Calendar.DAY_OF_YEAR)
+
+    cal.add(java.util.Calendar.DAY_OF_YEAR, -1)
+    val yesterdayYear = cal.get(java.util.Calendar.YEAR)
+    val yesterdayDayOfYear = cal.get(java.util.Calendar.DAY_OF_YEAR)
+
+    val y = trxCal.get(java.util.Calendar.YEAR)
+    val d = trxCal.get(java.util.Calendar.DAY_OF_YEAR)
+
+    return (y == todayYear && d == todayDayOfYear) || (y == yesterdayYear && d == yesterdayDayOfYear)
+}
 
 @Composable
 fun MenuCard(
@@ -265,6 +356,34 @@ fun DashboardScreen(
         storageHelper.saveBiayaList(biayaList)
     }
 
+    // Sinkronisasi otomatis saat screen kembali aktif (misal dari SalesScreen)
+    val lifecycleOwner = androidx.lifecycle.compose.LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner) {
+        val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
+            if (event == androidx.lifecycle.Lifecycle.Event.ON_RESUME) {
+                val localTrx = storageHelper.getTransaksiList()
+                val currentIds = transaksiList.map { it.idTransaksi }.toSet()
+                val localIds = localTrx.map { it.idTransaksi }.toSet()
+                if (localIds != currentIds || transaksiList.isEmpty()) {
+                    transaksiList.clear()
+                    transaksiList.addAll(localTrx)
+                }
+                val localBiaya = storageHelper.getBiayaList()
+                val currentBiayaIds = biayaList.map { it.id }.toSet()
+                val localBiayaIds = localBiaya.map { it.id }.toSet()
+                if (localBiayaIds != currentBiayaIds || biayaList.isEmpty()) {
+                    biayaList.clear()
+                    biayaList.addAll(localBiaya)
+                }
+                storageHelper.syncUnsyncedData()
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose {
+            lifecycleOwner.lifecycle.removeObserver(observer)
+        }
+    }
+
     LaunchedEffect(Unit) {
         try {
             val response = com.example.data.api.RetrofitClient.getUserApiService(mContext).getCurrentUser()
@@ -306,8 +425,14 @@ fun DashboardScreen(
         try {
             val response = com.example.data.api.RetrofitClient.getTransactionApiService(mContext).getTransactions()
             if (response.isSuccessful && response.body()?.data != null) {
+                val apiTrx = response.body()!!.data!!
+                val localTrx = storageHelper.getTransaksiList()
+                val apiTrxIds = apiTrx.map { it.idTransaksi }.toSet()
+                val unsyncedLocal = localTrx.filter { it.idTransaksi !in apiTrxIds }
+                val merged = (apiTrx + unsyncedLocal).distinctBy { "${it.idTransaksi}-${it.id}-${it.namaItem}" }
                 transaksiList.clear()
-                transaksiList.addAll(response.body()!!.data!!)
+                transaksiList.addAll(merged)
+                storageHelper.saveTransaksiList(merged)
             }
         } catch (e: Exception) {}
 
@@ -360,6 +485,7 @@ fun DashboardScreen(
                         role = role.displayName,
                         userName = userName,
                         transaksiList = transaksiList,
+                        menuList = menuList,
                         visibleMenus = visibleMenus,
                         onNavigateTab = { activeTab = it },
                         snackbarHostState = snackbarHostState,
@@ -431,11 +557,13 @@ fun DashboardScreen(
 }
 
 // ------------------------- 1. BERANDA TAB -------------------------
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun BerandaTabContent(
     role: String,
     userName: String,
-    transaksiList: List<TransaksiHarian>,
+    transaksiList: MutableList<TransaksiHarian>,
+    menuList: MutableList<MenuItem>,
     biayaList: List<BiayaOperasional>,
     visibleMenus: List<DashboardMenu>,
     onNavigateTab: (DashboardTab) -> Unit,
@@ -443,21 +571,84 @@ fun BerandaTabContent(
     onLogoutClick: (() -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
+    val context = androidx.compose.ui.platform.LocalContext.current
     val coroutineScope = rememberCoroutineScope()
+    val salesViewModel: com.example.ui.viewmodel.SalesViewModel = androidx.lifecycle.viewmodel.compose.viewModel()
+    val storageHelper = remember { com.example.utils.LocalStorageHelper(context) }
     val currentDate = java.text.SimpleDateFormat("EEEE, dd MMMM yyyy", java.util.Locale("id", "ID")).format(java.util.Date())
 
-    // 1. Dapatkan string tanggal hari ini dengan format yyyyMMdd (sesuai format idTransaksi)
-    val todayIdStr = java.text.SimpleDateFormat("yyyyMMdd", java.util.Locale.getDefault()).format(java.util.Date())
+    // State untuk Struk & Bluetooth Printer
+    var showReceiptDialog by remember { mutableStateOf(false) }
+    var receiptText by remember { mutableStateOf("") }
+    var currentTransaction by remember { mutableStateOf<Transaction?>(null) }
+    val sharedPrefs = remember { context.getSharedPreferences("printer_prefs", Context.MODE_PRIVATE) }
+    val bluetoothAdapter = remember { BluetoothAdapter.getDefaultAdapter() }
+    var showPrinterDialog by remember { mutableStateOf(false) }
+    var pairedDevicesList by remember { mutableStateOf<List<BluetoothDevice>>(emptyList()) }
 
-    // 2. Filter transaksi agar mengambil transaksi yang idTransaksi-nya mengandung tanggal hari ini
-    val todayTransaksiList = transaksiList.filter { it.idTransaksi.contains(todayIdStr) }
+    // State Tambah Item ke Pesanan Aktif
+    var showAddItemDialogForTrx by remember { mutableStateOf<String?>(null) }
+    var addNamaItem by remember { mutableStateOf("") }
+    var addQty by remember { mutableStateOf("1") }
+    var addHarga by remember { mutableStateOf("") }
+    var addCatatan by remember { mutableStateOf("") }
+    var addMenuDropdownExpanded by remember { mutableStateOf(false) }
 
-    // 3. Hitung total pemasukan hari ini dari list yang sudah difilter
+    val permissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestMultiplePermissions()
+    ) { permissions ->
+        val connectGranted = permissions[android.Manifest.permission.BLUETOOTH_CONNECT] ?: true
+        if (!connectGranted) {
+            Toast.makeText(context, "Izin Bluetooth dibutuhkan untuk mencetak struk", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    fun checkBluetoothAndPrint(onPermissionGranted: () -> Unit) {
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
+            val hasPermission = androidx.core.content.ContextCompat.checkSelfPermission(
+                context,
+                android.Manifest.permission.BLUETOOTH_CONNECT
+            ) == android.content.pm.PackageManager.PERMISSION_GRANTED
+            if (hasPermission) {
+                onPermissionGranted()
+            } else {
+                permissionLauncher.launch(
+                    arrayOf(
+                        android.Manifest.permission.BLUETOOTH_CONNECT,
+                        android.Manifest.permission.BLUETOOTH_SCAN
+                    )
+                )
+            }
+        } else {
+            onPermissionGranted()
+        }
+    }
+
+    // State untuk tracking item progress dan order completed
+    var activeOrderIds by remember { mutableStateOf(storageHelper.getActiveOrderIds()) }
+    var completedOrderIds by remember { mutableStateOf(storageHelper.getCompletedOrderIds()) }
+    var itemProgressTrigger by remember { mutableStateOf(0) }
+
+    // Helper untuk membuat unique key per item dalam transaksi
+    fun getItemKey(trxId: String, item: TransaksiHarian): String {
+        return "${trxId}_${item.id}_${item.namaItem}"
+    }
+
+    // 1. Filter transaksi hari ini dengan parser tanggal yang robust
+    val todayTransaksiList = transaksiList.filter { isTrxToday(it.idTransaksi, it.waktu) }
+
+    // Group transactions by idTransaksi, sorted from newest
+    val todayGrouped = remember(todayTransaksiList) {
+        todayTransaksiList.groupBy { it.idTransaksi }.entries
+            .sortedByDescending { it.value.firstOrNull()?.waktu ?: "" }
+    }
+
+    // 2. Hitung total pemasukan hari ini dari list yang sudah difilter
     val totalPenjualanHarian = todayTransaksiList
         .filter { !it.namaItem.contains("[BATAL]", ignoreCase = true) }
         .sumOf { it.jumlah * it.harga }
 
-    // 4. Update grup transaksi agar juga menggunakan data hari ini saja
+    // 3. Update grup transaksi agar juga menggunakan data hari ini saja
     val groupedTransactions = todayTransaksiList.groupBy { it.idTransaksi }
 
     val canceledTransactionsCount = groupedTransactions.count { (_, items) -> 
@@ -598,32 +789,22 @@ fun BerandaTabContent(
                 val labels = listOf("Sen", "Sel", "Rab", "Kam", "Jum", "Sab", "Min")
                 val counts = remember(transaksiList.toList()) {
                     val arr = IntArray(7)
-                    val calendar = java.util.Calendar.getInstance()
                     transaksiList.forEach { trx ->
                         try {
-                            val dateStr = if (trx.idTransaksi.startsWith("TRX-") && trx.idTransaksi.length >= 12) {
-                                trx.idTransaksi.substring(4, 12)
-                            } else {
-                                ""
-                            }
-                            if (dateStr.isNotEmpty()) {
-                                val sdf = java.text.SimpleDateFormat("yyyyMMdd", java.util.Locale.getDefault())
-                                val date = sdf.parse(dateStr)
-                                if (date != null) {
-                                    calendar.time = date
-                                    val dayOfWeek = calendar.get(java.util.Calendar.DAY_OF_WEEK)
-                                    val index = when (dayOfWeek) {
-                                        java.util.Calendar.MONDAY -> 0
-                                        java.util.Calendar.TUESDAY -> 1
-                                        java.util.Calendar.WEDNESDAY -> 2
-                                        java.util.Calendar.THURSDAY -> 3
-                                        java.util.Calendar.FRIDAY -> 4
-                                        java.util.Calendar.SATURDAY -> 5
-                                        java.util.Calendar.SUNDAY -> 6
-                                        else -> 0
-                                    }
-                                    arr[index] += trx.jumlah
+                            val cal = parseTrxDate(trx.idTransaksi, trx.waktu)
+                            if (cal != null) {
+                                val dayOfWeek = cal.get(java.util.Calendar.DAY_OF_WEEK)
+                                val index = when (dayOfWeek) {
+                                    java.util.Calendar.MONDAY -> 0
+                                    java.util.Calendar.TUESDAY -> 1
+                                    java.util.Calendar.WEDNESDAY -> 2
+                                    java.util.Calendar.THURSDAY -> 3
+                                    java.util.Calendar.FRIDAY -> 4
+                                    java.util.Calendar.SATURDAY -> 5
+                                    java.util.Calendar.SUNDAY -> 6
+                                    else -> 0
                                 }
+                                arr[index] += trx.jumlah
                             }
                         } catch (e: Exception) {
                             // ignore
@@ -671,8 +852,674 @@ fun BerandaTabContent(
                 }
             }
         }
+
+        val isAdminToko = role.equals(UserRole.ADMIN_TOKO.displayName, ignoreCase = true) || role.equals(UserRole.ADMIN_TOKO.name, ignoreCase = true)
+
+        if (isAdminToko) {
+            Spacer(modifier = Modifier.height(24.dp))
+
+            // Filter hanya transaksi yang SEDANG BERJALAN (terdaftar aktif, belum selesai & tidak dibatalkan)
+            val activeTransactions = remember(todayGrouped, activeOrderIds, completedOrderIds, itemProgressTrigger) {
+                todayGrouped.filter { (trxId, items) ->
+                    val isCanceled = items.any { it.namaItem.startsWith("❌") }
+                    val isActive = activeOrderIds.contains(trxId)
+                    val isCompleted = completedOrderIds.contains(trxId)
+                    isActive && !isCanceled && !isCompleted
+                }
+            }
+
+            // Header Section: Orderan yang Sedang Berjalan
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = "ORDERAN SEDANG BERJALAN",
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.Bold
+                    )
+                if (activeTransactions.isNotEmpty()) {
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Surface(
+                        color = MaterialTheme.colorScheme.primary,
+                        shape = CircleShape
+                    ) {
+                        Text(
+                            text = "${activeTransactions.size}",
+                            color = Color.White,
+                            style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
+                        )
+                    }
+                }
+            }
+            if (visibleMenus.any { it.tab == DashboardTab.Penjualan }) {
+                TextButton(onClick = { onNavigateTab(DashboardTab.Penjualan) }) {
+                    Text("Riwayat Penjualan", style = MaterialTheme.typography.labelMedium)
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(8.dp))
+
+        // Konten Daftar Orderan Berjalan
+        if (activeTransactions.isEmpty()) {
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(16.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(24.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.Center
+                ) {
+                    Icon(
+                        imageVector = AppIcons.Check,
+                        contentDescription = null,
+                        modifier = Modifier.size(48.dp),
+                        tint = SuccessColor
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        text = "Semua orderan telah selesai dikerjakan!",
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    Text(
+                        text = "Tidak ada pesanan yang sedang berjalan saat ini",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Color.Gray
+                    )
+                    if (visibleMenus.any { it.tab == DashboardTab.Penjualan } && role != UserRole.OWNER.displayName) {
+                        Spacer(modifier = Modifier.height(14.dp))
+                        Button(
+                            onClick = { onNavigateTab(DashboardTab.Penjualan) },
+                            shape = RoundedCornerShape(8.dp)
+                        ) {
+                            Icon(AppIcons.Add, contentDescription = null, modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text("Buka Kasir / Buat Orderan Baru", style = MaterialTheme.typography.labelMedium)
+                        }
+                    }
+                }
+            }
+        } else {
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                activeTransactions.forEach { (trxId, itemsInTrx) ->
+                    val totalTrxPrice = itemsInTrx.sumOf { it.jumlah * it.harga }
+                    val rawTime = itemsInTrx.firstOrNull()?.waktu ?: ""
+                    val timeStr = try {
+                        val cal = parseTrxDate(trxId, rawTime)
+                        if (cal != null) {
+                            java.text.SimpleDateFormat("HH:mm", java.util.Locale.getDefault()).format(cal.time)
+                        } else {
+                            rawTime
+                        }
+                    } catch (e: Exception) {
+                        rawTime
+                    }
+                    val cashier = itemsInTrx.firstOrNull()?.dicatatOleh ?: ""
+                    val paymentMethod = itemsInTrx.firstOrNull()?.metodePembayaran ?: "CASH"
+
+                    val allItemsDone = itemsInTrx.all { item ->
+                        storageHelper.getOrderItemProgress(getItemKey(trxId, item)) >= item.jumlah
+                    }
+
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(16.dp),
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(16.dp)
+                        ) {
+                            // Header: Status, ID & Waktu
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Surface(
+                                        color = if (allItemsDone) SuccessColor.copy(alpha = 0.15f) else InfoColor.copy(alpha = 0.15f),
+                                        shape = RoundedCornerShape(6.dp)
+                                    ) {
+                                        Text(
+                                            text = if (allItemsDone) "SIAP DISAJIKAN" else "PROSES",
+                                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
+                                            style = MaterialTheme.typography.labelSmall.copy(
+                                                fontWeight = FontWeight.Bold,
+                                                color = if (allItemsDone) SuccessColor else InfoColor
+                                            )
+                                        )
+                                    }
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text(
+                                        text = trxId,
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                }
+                                Text(
+                                    text = timeStr,
+                                    style = MaterialTheme.typography.labelMedium,
+                                    color = Color.Gray
+                                )
+                            }
+                            Spacer(modifier = Modifier.height(2.dp))
+                            Text(
+                                text = "Oleh: $cashier • $paymentMethod",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = Color.Gray
+                            )
+
+                            HorizontalDivider(modifier = Modifier.padding(vertical = 10.dp), color = Color.LightGray.copy(alpha = 0.25f))
+
+                            // Daftar Item Menu dengan Stepper (+/-)
+                            itemsInTrx.forEach { item ->
+                                val itemKey = getItemKey(trxId, item)
+                                val currentProgress = storageHelper.getOrderItemProgress(itemKey)
+                                val maxQty = item.jumlah
+                                val isItemDone = currentProgress >= maxQty
+
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(vertical = 6.dp),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    // Informasi Menu
+                                    Column(modifier = Modifier.weight(1f).padding(end = 8.dp)) {
+                                        Text(
+                                            text = item.namaItem,
+                                            style = MaterialTheme.typography.bodyMedium.copy(
+                                                fontWeight = FontWeight.SemiBold,
+                                                textDecoration = if (isItemDone) TextDecoration.LineThrough else TextDecoration.None,
+                                                color = if (isItemDone) Color.Gray else MaterialTheme.colorScheme.onSurface
+                                            )
+                                        )
+                                        if (item.catatan.isNotBlank()) {
+                                            Text(
+                                                text = "Catatan: ${item.catatan}",
+                                                style = MaterialTheme.typography.labelSmall,
+                                                color = if (isItemDone) Color.LightGray else DangerColor
+                                            )
+                                        }
+                                        Text(
+                                            text = "${formatRupiah(item.harga.toLong())} / porsi",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = Color.Gray
+                                        )
+                                    }
+
+                                    // Stepper Kontrol (+ / -) Responsive
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                    ) {
+                                        // Tombol Kurang (-)
+                                        FilledTonalIconButton(
+                                            onClick = {
+                                                if (currentProgress > 0) {
+                                                    storageHelper.setOrderItemProgress(itemKey, currentProgress - 1)
+                                                    itemProgressTrigger++
+                                                }
+                                            },
+                                            enabled = currentProgress > 0,
+                                            modifier = Modifier.size(32.dp),
+                                            shape = CircleShape
+                                        ) {
+                                            Icon(AppIcons.Remove, contentDescription = "Kurang", modifier = Modifier.size(16.dp))
+                                        }
+
+                                        // Badge Status Progres X/Y
+                                        Surface(
+                                            color = if (isItemDone) SuccessColor.copy(alpha = 0.15f)
+                                                    else if (currentProgress > 0) MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)
+                                                    else Color.LightGray.copy(alpha = 0.25f),
+                                            shape = RoundedCornerShape(8.dp)
+                                        ) {
+                                            Text(
+                                                text = "$currentProgress/$maxQty",
+                                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                                                style = MaterialTheme.typography.labelMedium.copy(
+                                                    fontWeight = FontWeight.Bold,
+                                                    color = if (isItemDone) SuccessColor
+                                                            else if (currentProgress > 0) MaterialTheme.colorScheme.primary
+                                                            else Color.DarkGray
+                                                )
+                                            )
+                                        }
+
+                                        // Tombol Tambah (+)
+                                        FilledTonalIconButton(
+                                            onClick = {
+                                                if (currentProgress < maxQty) {
+                                                    storageHelper.setOrderItemProgress(itemKey, currentProgress + 1)
+                                                    itemProgressTrigger++
+                                                }
+                                            },
+                                            enabled = currentProgress < maxQty,
+                                            modifier = Modifier.size(32.dp),
+                                            shape = CircleShape
+                                        ) {
+                                            Icon(AppIcons.Add, contentDescription = "Tambah", modifier = Modifier.size(16.dp))
+                                        }
+                                    }
+                                }
+
+                                // Tombol Tambah Item Menu ke Pesanan Aktif
+                                OutlinedButton(
+                                    onClick = {
+                                        addNamaItem = ""
+                                        addQty = "1"
+                                        addHarga = ""
+                                        addCatatan = ""
+                                        addMenuDropdownExpanded = false
+                                        showAddItemDialogForTrx = trxId
+                                    },
+                                    modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+                                    shape = RoundedCornerShape(8.dp),
+                                    contentPadding = PaddingValues(vertical = 4.dp)
+                                ) {
+                                    Icon(AppIcons.Add, contentDescription = null, modifier = Modifier.size(16.dp))
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text("Tambah Item Menu", style = MaterialTheme.typography.labelSmall)
+                                }
+
+                                HorizontalDivider(modifier = Modifier.padding(vertical = 10.dp), color = Color.LightGray.copy(alpha = 0.25f))
+
+                                // Footer: Total & Tombol Selesaikan Pesanan
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Column {
+                                        Text("Total Tagihan", style = MaterialTheme.typography.labelSmall, color = Color.Gray)
+                                        Text(
+                                            text = formatRupiah(totalTrxPrice.toLong()),
+                                            style = MaterialTheme.typography.titleSmall,
+                                            fontWeight = FontWeight.Bold,
+                                            color = MaterialTheme.colorScheme.primary
+                                        )
+                                    }
+
+                                    Button(
+                                        onClick = {
+                                            // Set seluruh item ke porsi maksimal dan tandai selesai
+                                            itemsInTrx.forEach { item ->
+                                                storageHelper.setOrderItemProgress(getItemKey(trxId, item), item.jumlah)
+                                            }
+                                            storageHelper.markOrderCompleted(trxId)
+                                            activeOrderIds = storageHelper.getActiveOrderIds()
+                                            completedOrderIds = storageHelper.getCompletedOrderIds()
+                                            itemProgressTrigger++
+
+                                            // Rekonstruksi transaksi dan tampilkan dialog Struk Penjualan
+                                            val firstItem = itemsInTrx.firstOrNull()
+                                            val rawTime = firstItem?.waktu ?: ""
+                                            val timestamp = try {
+                                                val cal = parseTrxDate(trxId, rawTime)
+                                                cal?.timeInMillis ?: System.currentTimeMillis()
+                                            } catch (e: Exception) {
+                                                System.currentTimeMillis()
+                                            }
+                                            val mappedItems = itemsInTrx.map {
+                                                com.example.data.TransactionItem(
+                                                    itemId = it.id,
+                                                    namaBarang = it.namaItem,
+                                                    qty = it.jumlah,
+                                                    harga = it.harga.toLong(),
+                                                    subTotal = (it.jumlah * it.harga).toLong()
+                                                )
+                                            }
+                                            val totalHarga = itemsInTrx.sumOf { (it.jumlah * it.harga).toLong() }
+                                            val completedTrx = com.example.data.Transaction(
+                                                kodeTransaksi = trxId,
+                                                tanggalTransaksi = timestamp,
+                                                items = mappedItems,
+                                                totalHarga = totalHarga,
+                                                totalSetelahDiskon = totalHarga
+                                            )
+                                            currentTransaction = completedTrx
+                                            receiptText = salesViewModel.formatReceipt(completedTrx)
+                                            showReceiptDialog = true
+
+                                            coroutineScope.launch {
+                                                snackbarHostState.showSnackbar("Pesanan $trxId selesai!", withDismissAction = true)
+                                            }
+                                        },
+                                        colors = ButtonDefaults.buttonColors(
+                                            containerColor = if (allItemsDone) SuccessColor else MaterialTheme.colorScheme.primary
+                                        ),
+                                        shape = RoundedCornerShape(8.dp),
+                                        contentPadding = PaddingValues(horizontal = 14.dp, vertical = 6.dp)
+                                    ) {
+                                        Icon(AppIcons.Check, contentDescription = null, modifier = Modifier.size(16.dp), tint = Color.White)
+                                        Spacer(modifier = Modifier.width(6.dp))
+                                        Text("Selesaikan Pesanan", style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold))
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // ---------- DIALOG TAMBAH ITEM KE PESANAN AKTIF ----------
+        showAddItemDialogForTrx?.let { currentTrxId ->
+            val itemsInCurrentTrx = todayTransaksiList.filter { it.idTransaksi == currentTrxId }
+            val paymentMethod = itemsInCurrentTrx.firstOrNull()?.metodePembayaran ?: "CASH"
+
+            AlertDialog(
+                onDismissRequest = { showAddItemDialogForTrx = null },
+                title = { Text("Tambah Item ke Pesanan", fontWeight = FontWeight.Bold) },
+                text = {
+                    Column(
+                        modifier = Modifier.fillMaxWidth().verticalScroll(rememberScrollState()),
+                        verticalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        Text("ID Transaksi: $currentTrxId", style = MaterialTheme.typography.labelMedium, color = Color.Gray)
+
+                        // Dropdown / Autocomplete Menu
+                        ExposedDropdownMenuBox(
+                            expanded = addMenuDropdownExpanded,
+                            onExpandedChange = { addMenuDropdownExpanded = !addMenuDropdownExpanded }
+                        ) {
+                            OutlinedTextField(
+                                value = addNamaItem,
+                                onValueChange = {
+                                    addNamaItem = it
+                                    addMenuDropdownExpanded = true
+                                },
+                                label = { Text("Nama Menu / Barang") },
+                                modifier = Modifier.fillMaxWidth().menuAnchor(),
+                                trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = addMenuDropdownExpanded) }
+                            )
+                            val filteredMenu = if (addNamaItem.isBlank()) menuList else menuList.filter { it.nama.contains(addNamaItem, ignoreCase = true) }
+                            if (filteredMenu.isNotEmpty()) {
+                                ExposedDropdownMenu(
+                                    expanded = addMenuDropdownExpanded,
+                                    onDismissRequest = { addMenuDropdownExpanded = false }
+                                ) {
+                                    filteredMenu.forEach { menu ->
+                                        DropdownMenuItem(
+                                            text = {
+                                                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                                                    Text(menu.nama, fontWeight = FontWeight.Medium)
+                                                    Text(formatRupiah(menu.harga.toLong()), color = MaterialTheme.colorScheme.primary)
+                                                }
+                                            },
+                                            onClick = {
+                                                addNamaItem = menu.nama
+                                                addHarga = menu.harga.toLong().toString()
+                                                addMenuDropdownExpanded = false
+                                            }
+                                        )
+                                    }
+                                }
+                            }
+                        }
+
+                        // Jumlah & Harga
+                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            OutlinedTextField(
+                                value = addQty,
+                                onValueChange = { addQty = it },
+                                label = { Text("Jumlah") },
+                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                                modifier = Modifier.weight(1f)
+                            )
+                            OutlinedTextField(
+                                value = addHarga,
+                                onValueChange = { addHarga = it },
+                                label = { Text("Harga Satuan") },
+                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                                modifier = Modifier.weight(1.5f)
+                            )
+                        }
+
+                        OutlinedTextField(
+                            value = addCatatan,
+                            onValueChange = { addCatatan = it },
+                            label = { Text("Catatan (Opsional)") },
+                            placeholder = { Text("Contoh: Pedas, Tanpa Es") },
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    }
+                },
+                confirmButton = {
+                    Button(
+                        onClick = {
+                            val qtyVal = addQty.toIntOrNull() ?: 1
+                            val priceVal = addHarga.toDoubleOrNull() ?: 0.0
+                            if (addNamaItem.isNotBlank() && qtyVal > 0) {
+                                val uniqueId = "ITM-${System.currentTimeMillis()}"
+                                val apiFormatter = java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'", java.util.Locale.getDefault()).apply {
+                                    timeZone = java.util.TimeZone.getTimeZone("UTC")
+                                }
+                                val waktuIso = apiFormatter.format(java.util.Date())
+
+                                val newTrxItem = TransaksiHarian(
+                                    idTransaksi = currentTrxId,
+                                    id = uniqueId,
+                                    namaItem = addNamaItem.trim(),
+                                    jumlah = qtyVal,
+                                    harga = priceVal,
+                                    waktu = waktuIso,
+                                    dicatatOleh = role,
+                                    catatan = addCatatan.trim(),
+                                    metodePembayaran = paymentMethod
+                                )
+
+                                transaksiList.add(newTrxItem)
+                                storageHelper.saveTransaksiList(transaksiList.toList())
+                                itemProgressTrigger++
+
+                                coroutineScope.launch {
+                                    try {
+                                        val apiItem = com.example.data.TransactionItemRequest(
+                                            namaItem = newTrxItem.namaItem,
+                                            jumlah = newTrxItem.jumlah,
+                                            harga = newTrxItem.harga,
+                                            catatan = newTrxItem.catatan
+                                        )
+                                        val request = com.example.data.TransactionRequest(
+                                            idTransaksi = newTrxItem.idTransaksi,
+                                            waktu = newTrxItem.waktu,
+                                            dicatatOleh = newTrxItem.dicatatOleh,
+                                            payment_method = paymentMethod,
+                                            items = listOf(apiItem)
+                                        )
+                                        com.example.data.api.RetrofitClient.getTransactionApiService(context).createTransaction(request)
+                                    } catch (e: Exception) {}
+                                }
+                                showAddItemDialogForTrx = null
+                                coroutineScope.launch {
+                                    snackbarHostState.showSnackbar("Item berhasil ditambahkan ke pesanan $currentTrxId")
+                                }
+                            }
+                        },
+                        enabled = addNamaItem.isNotBlank()
+                    ) {
+                        Text("SIMPAN")
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { showAddItemDialogForTrx = null }) {
+                        Text("BATAL")
+                    }
+                }
+            )
+        }
+
+        // ---------- DIALOG STRUK PENJUALAN ----------
+        if (showReceiptDialog) {
+            AlertDialog(
+                onDismissRequest = { showReceiptDialog = false },
+                title = { Text("Struk Penjualan", fontWeight = FontWeight.Bold) },
+                text = {
+                    Surface(
+                        modifier = Modifier.fillMaxWidth(),
+                        color = Color.White,
+                        shape = RoundedCornerShape(4.dp),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, Color.LightGray)
+                    ) {
+                        Text(
+                            text = receiptText,
+                            modifier = Modifier.padding(16.dp),
+                            fontFamily = FontFamily.Monospace,
+                            fontSize = 12.sp,
+                            lineHeight = 16.sp,
+                            color = Color.Black
+                        )
+                    }
+                },
+                dismissButton = {
+                    Row(
+                        modifier = Modifier.horizontalScroll(rememberScrollState()),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        TextButton(onClick = {
+                            currentTransaction?.let { trx ->
+                                val quotationData = TransactionModel(
+                                    customerName = "Pelanggan Umum",
+                                    customerAddress = "Jl. Raya Warung No. 123",
+                                    items = trx.items.map { 
+                                        InvoiceItem(
+                                            name = it.namaBarang,
+                                            qty = it.qty,
+                                            price = it.harga.toDouble()
+                                        )
+                                    },
+                                    salesName = "Admin Warung",
+                                    invoiceCode = trx.kodeTransaksi,
+                                    date = SimpleDateFormat("dd/MM/yyyy", Locale.getDefault()).format(Date(trx.tanggalTransaksi)),
+                                    notes = "Terima kasih atas kunjungan Anda."
+                                )
+                                generateQuotationPdf(context, quotationData, salesViewModel.namaWarungState.value)
+                            }
+                        }) {
+                            Icon(AppIcons.Pdf, contentDescription = null)
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text("Export PDF")
+                        }
+
+                        TextButton(onClick = {
+                            checkBluetoothAndPrint {
+                                if (bluetoothAdapter == null) {
+                                    Toast.makeText(context, "Bluetooth tidak didukung di perangkat ini", Toast.LENGTH_SHORT).show()
+                                    return@checkBluetoothAndPrint
+                                }
+                                if (!bluetoothAdapter.isEnabled) {
+                                    Toast.makeText(context, "Nyalakan Bluetooth terlebih dahulu", Toast.LENGTH_SHORT).show()
+                                    return@checkBluetoothAndPrint
+                                }
+
+                                val lastPrinterMac = sharedPrefs.getString("last_printer_mac", null)
+                                val bondedDevices = try { bluetoothAdapter.bondedDevices } catch (e: SecurityException) { emptySet() }
+                                
+                                val lastDevice = bondedDevices.find { it.address == lastPrinterMac }
+                                if (lastDevice != null) {
+                                    Toast.makeText(context, "Mencetak ke ${lastDevice.name}...", Toast.LENGTH_SHORT).show()
+                                    salesViewModel.printToThermal(lastDevice, receiptText) { success ->
+                                        val message = if (success) "Struk berhasil dicetak" else "Gagal mencetak struk"
+                                        (context as? android.app.Activity)?.runOnUiThread {
+                                            Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
+                                        }
+                                    }
+                                } else {
+                                    pairedDevicesList = bondedDevices.toList()
+                                    if (pairedDevicesList.isEmpty()) {
+                                        Toast.makeText(context, "Tidak ada printer Bluetooth terpasang. Pasangkan printer di pengaturan HP.", Toast.LENGTH_LONG).show()
+                                    } else {
+                                        showPrinterDialog = true
+                                    }
+                                }
+                            }
+                        }) {
+                            Icon(AppIcons.Print, contentDescription = null)
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text("Cetak Struk")
+                        }
+                    }
+                },
+                confirmButton = {
+                    Button(onClick = { showReceiptDialog = false }) {
+                        Text("Selesai")
+                    }
+                }
+            )
+        }
+
+        // ---------- DIALOG PILIH PRINTER BLUETOOTH ----------
+        if (showPrinterDialog) {
+            AlertDialog(
+                onDismissRequest = { showPrinterDialog = false },
+                title = { Text("Pilih Printer Bluetooth") },
+                text = {
+                    LazyColumn(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        items(pairedDevicesList) { device ->
+                            Card(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable {
+                                        sharedPrefs.edit().putString("last_printer_mac", device.address).apply()
+                                        showPrinterDialog = false
+                                        Toast.makeText(context, "Mencetak ke ${device.name}...", Toast.LENGTH_SHORT).show()
+                                        salesViewModel.printToThermal(device, receiptText) { success ->
+                                            val message = if (success) "Struk berhasil dicetak" else "Gagal mencetak struk"
+                                            (context as? android.app.Activity)?.runOnUiThread {
+                                                Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
+                                            }
+                                        }
+                                    },
+                                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(16.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Icon(AppIcons.Print, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                                    Spacer(modifier = Modifier.width(16.dp))
+                                    Column {
+                                        Text(device.name ?: "Unknown Device", fontWeight = FontWeight.Bold)
+                                        Text(device.address, style = MaterialTheme.typography.bodySmall, color = Color.Gray)
+                                    }
+                                }
+                            }
+                        }
+                    }
+                },
+                confirmButton = {
+                    TextButton(onClick = { showPrinterDialog = false }) {
+                        Text("Tutup")
+                    }
+                }
+            )
+        }
     }
 }
+}
+
 
 // ------------------------- 2. PENJUALAN TAB -------------------------
 @OptIn(ExperimentalMaterial3Api::class)
@@ -685,6 +1532,7 @@ fun PenjualanTabContent(
     onNavigateToSales: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val isOwner = role.equals(UserRole.OWNER.displayName, ignoreCase = true) || role.equals(UserRole.OWNER.name, ignoreCase = true)
     val currentDate = java.text.SimpleDateFormat("EEEE, dd MMMM yyyy", java.util.Locale("id", "ID")).format(java.util.Date())
     var showActionChooser by remember { mutableStateOf(false) }
     var showAddForm by remember { mutableStateOf(false) }
@@ -771,71 +1619,13 @@ fun PenjualanTabContent(
 
     // Fungsi helper untuk memeriksa apakah transaksi terjadi hari ini atau kemarin
     fun isTodayOrYesterday(idTransaksi: String, waktu: String): Boolean {
-        val cal = java.util.Calendar.getInstance()
-        val todayYear = cal.get(java.util.Calendar.YEAR)
-        val todayDayOfYear = cal.get(java.util.Calendar.DAY_OF_YEAR)
-
-        cal.add(java.util.Calendar.DAY_OF_YEAR, -1)
-        val yesterdayYear = cal.get(java.util.Calendar.YEAR)
-        val yesterdayDayOfYear = cal.get(java.util.Calendar.DAY_OF_YEAR)
-
-        // 1. Coba parse dari string waktu ISO / format tanggal
-        if (waktu.isNotBlank()) {
-            try {
-                val cleanTime = if (waktu.length >= 19) waktu.substring(0, 19) else waktu
-                val parsedDate = if (cleanTime.contains("T")) {
-                    val parser = java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss", java.util.Locale.getDefault()).apply {
-                        timeZone = java.util.TimeZone.getTimeZone("UTC")
-                    }
-                    parser.parse(cleanTime)
-                } else if (cleanTime.contains("-") && cleanTime.length >= 10) {
-                    val parser = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.getDefault())
-                    parser.parse(cleanTime.substring(0, 10))
-                } else if (cleanTime.length == 8 && cleanTime.all { it.isDigit() }) {
-                    val parser = java.text.SimpleDateFormat("yyyyMMdd", java.util.Locale.getDefault())
-                    parser.parse(cleanTime)
-                } else null
-
-                if (parsedDate != null) {
-                    val trxCal = java.util.Calendar.getInstance().apply { time = parsedDate }
-                    val y = trxCal.get(java.util.Calendar.YEAR)
-                    val d = trxCal.get(java.util.Calendar.DAY_OF_YEAR)
-                    if ((y == todayYear && d == todayDayOfYear) || (y == yesterdayYear && d == yesterdayDayOfYear)) {
-                        return true
-                    }
-                }
-            } catch (e: Exception) {
-                // Abaikan jika error parsing
-            }
-        }
-
-        // 2. Fallback via format kode transaksi idTransaksi (TRX-yyyyMMdd...)
-        if (idTransaksi.startsWith("TRX-") && idTransaksi.length >= 12) {
-            val dateStr = idTransaksi.substring(4, 12)
-            try {
-                val sdf = java.text.SimpleDateFormat("yyyyMMdd", java.util.Locale.getDefault())
-                val d = sdf.parse(dateStr)
-                if (d != null) {
-                    val trxCal = java.util.Calendar.getInstance().apply { time = d }
-                    val y = trxCal.get(java.util.Calendar.YEAR)
-                    val dDay = trxCal.get(java.util.Calendar.DAY_OF_YEAR)
-                    if ((y == todayYear && dDay == todayDayOfYear) || (y == yesterdayYear && dDay == yesterdayDayOfYear)) {
-                        return true
-                    }
-                }
-            } catch (e: Exception) {}
-        }
-
-        return false
+        return isTrxTodayOrYesterday(idTransaksi, waktu)
     }
 
-    // 1. Dapatkan string tanggal hari ini dengan format yyyyMMdd (sesuai format idTransaksi)
-    val todayIdStr = java.text.SimpleDateFormat("yyyyMMdd", java.util.Locale.getDefault()).format(java.util.Date())
+    // 1. Filter transaksi hari ini
+    val todayTransaksiList = transaksiList.filter { isTrxToday(it.idTransaksi, it.waktu) }
 
-    // 2. Filter transaksi agar mengambil transaksi yang idTransaksi-nya mengandung tanggal hari ini
-    val todayTransaksiList = transaksiList.filter { it.idTransaksi.contains(todayIdStr) }
-
-    // 3. Hitung total penjualan harian
+    // 2. Hitung total penjualan harian
     val totalPenjualanHarian = todayTransaksiList
         .filter { !it.namaItem.contains("[BATAL]", ignoreCase = true) }
         .sumOf { it.jumlah * it.harga }
@@ -1025,7 +1815,7 @@ fun PenjualanTabContent(
 
                             val dismissState = rememberSwipeToDismissBoxState(
                                 confirmValueChange = {
-                                    if (it == SwipeToDismissBoxValue.EndToStart) {
+                                    if (isOwner && it == SwipeToDismissBoxValue.EndToStart) {
                                         transactionIdToDelete = trxId
                                         false
                                     } else false
@@ -1035,20 +1825,22 @@ fun PenjualanTabContent(
                                 state = dismissState,
                                 modifier = Modifier.fillMaxWidth().wrapContentHeight(),
                                 backgroundContent = {
-                                    val color by animateColorAsState(
-                                        when (dismissState.targetValue) {
-                                            SwipeToDismissBoxValue.EndToStart -> DangerColor
-                                            else -> Color.Transparent
+                                    if (isOwner) {
+                                        val color by animateColorAsState(
+                                            when (dismissState.targetValue) {
+                                                SwipeToDismissBoxValue.EndToStart -> DangerColor
+                                                else -> Color.Transparent
+                                            }
+                                        )
+                                        Box(
+                                            modifier = Modifier
+                                                .fillMaxSize()
+                                                .background(color, RoundedCornerShape(8.dp))
+                                                .padding(horizontal = 20.dp),
+                                            contentAlignment = Alignment.CenterEnd
+                                        ) {
+                                            Icon(AppIcons.Delete, contentDescription = "Hapus", tint = Color.White)
                                         }
-                                    )
-                                    Box(
-                                        modifier = Modifier
-                                            .fillMaxSize()
-                                            .background(color, RoundedCornerShape(8.dp))
-                                            .padding(horizontal = 20.dp),
-                                        contentAlignment = Alignment.CenterEnd
-                                    ) {
-                                        Icon(AppIcons.Delete, contentDescription = "Hapus", tint = Color.White)
                                     }
                                 },
                                 content = {
@@ -1156,15 +1948,17 @@ fun PenjualanTabContent(
             }
         }
 
-        // Floating Action Button
-        FloatingActionButton(
-            onClick = { showActionChooser = true },
-            modifier = Modifier
-                .align(Alignment.BottomEnd)
-                .padding(24.dp),
-            containerColor = MaterialTheme.colorScheme.primary
-        ) {
-            Icon(AppIcons.Add, contentDescription = "Tambah", tint = Color.White)
+        // Floating Action Button (Hanya untuk Admin Toko / Non-Owner)
+        if (!isOwner) {
+            FloatingActionButton(
+                onClick = { showActionChooser = true },
+                modifier = Modifier
+                    .align(Alignment.BottomEnd)
+                    .padding(24.dp),
+                containerColor = MaterialTheme.colorScheme.primary
+            ) {
+                Icon(AppIcons.Add, contentDescription = "Tambah", tint = Color.White)
+            }
         }
 
         if (showActionChooser) {
@@ -1473,9 +2267,10 @@ fun PenjualanTabContent(
                                          )
                                          com.example.data.api.RetrofitClient.getTransactionApiService(mContext).createTransaction(request)
                                      } catch (e: Exception) {}
+                                     storageHelper.addActiveOrderId(newTrx.idTransaksi)
+                                     transaksiList.add(newTrx)
+                                     showAddForm = false
                                  }
-                                 transaksiList.add(newTrx)
-                                 showAddForm = false
                              }
                     ) {
                         Text("SIMPAN")
@@ -1503,12 +2298,20 @@ fun PenjualanTabContent(
                                 .deleteTransaction(trxId)
                             if (response.isSuccessful) {
                                 transaksiList.removeAll(itemsToDelete)
+                                storageHelper.saveTransaksiList(transaksiList.toList())
+                                storageHelper.removeActiveOrderId(trxId)
                                 snackbarHostState.showSnackbar("Transaksi berhasil dihapus secara permanen")
                             } else {
-                                snackbarHostState.showSnackbar("Gagal menghapus: Anda mungkin tidak memiliki akses (Admin)")
+                                transaksiList.removeAll(itemsToDelete)
+                                storageHelper.saveTransaksiList(transaksiList.toList())
+                                storageHelper.removeActiveOrderId(trxId)
+                                snackbarHostState.showSnackbar("Transaksi berhasil dihapus")
                             }
                         } catch (e: Exception) {
-                            snackbarHostState.showSnackbar("Error jaringan: ${e.localizedMessage ?: "Tidak dapat menghubungi server"}")
+                            transaksiList.removeAll(itemsToDelete)
+                            storageHelper.saveTransaksiList(transaksiList.toList())
+                            storageHelper.removeActiveOrderId(trxId)
+                            snackbarHostState.showSnackbar("Transaksi berhasil dihapus secara lokal")
                         }
                     }
                     transactionIdToDelete = null
@@ -1585,54 +2388,44 @@ fun PenjualanTabContent(
                     ) {
                         TextButton(
                             onClick = {
-                                var transaction = storageHelper.getNestedTransactions().find { it.kodeTransaksi == item.idTransaksi }
-                                
-                                if (transaction == null) {
-                                    // Rekonstruksi dari transaksiList (data API)
-                                    val relatedItems = transaksiList.filter { it.idTransaksi == item.idTransaksi }
-                                    if (relatedItems.isNotEmpty()) {
-                                        val firstItem = relatedItems.first()
-                                        val rawTime = firstItem.waktu
-                                        
-                                        val timestamp = try {
-                                            if (rawTime.contains("T")) {
-                                                val formats = listOf(
-                                                    "yyyy-MM-dd'T'HH:mm:ss.SSSSSS'Z'",
-                                                    "yyyy-MM-dd'T'HH:mm:ss.SSS'Z'",
-                                                    "yyyy-MM-dd'T'HH:mm:ss'Z'"
-                                                )
-                                                var parsedDate: java.util.Date? = null
-                                                for (fmt in formats) {
-                                                    try {
-                                                        val parser = java.text.SimpleDateFormat(fmt, java.util.Locale.getDefault())
-                                                        parser.timeZone = java.util.TimeZone.getTimeZone("UTC")
-                                                        parsedDate = parser.parse(rawTime)
-                                                        if (parsedDate != null) break
-                                                    } catch (e: Exception) {}
-                                                }
-                                                parsedDate?.time ?: System.currentTimeMillis()
-                                            } else {
-                                                rawTime.toLongOrNull() ?: System.currentTimeMillis()
-                                            }
-                                        } catch (e: Exception) {
-                                            System.currentTimeMillis()
-                                        }
+                                val relatedItems = transaksiList.filter { it.idTransaksi == item.idTransaksi }
+                                val nestedTrx = storageHelper.getNestedTransactions().find { it.kodeTransaksi == item.idTransaksi }
 
-                                        transaction = com.example.data.Transaction(
-                                            kodeTransaksi = item.idTransaksi,
-                                            tanggalTransaksi = timestamp,
-                                            items = relatedItems.map { 
-                                                com.example.data.TransactionItem(
-                                                    itemId = it.id,
-                                                    namaBarang = it.namaItem,
-                                                    qty = it.jumlah,
-                                                    harga = it.harga.toLong()
-                                                )
-                                            },
-                                            totalHarga = relatedItems.sumOf { (it.jumlah * it.harga).toLong() },
-                                            totalSetelahDiskon = relatedItems.sumOf { (it.jumlah * it.harga).toLong() }
+                                val transaction = if (relatedItems.isNotEmpty()) {
+                                    val firstItem = relatedItems.first()
+                                    val rawTime = firstItem.waktu
+                                    val timestamp = try {
+                                        val cal = parseTrxDate(item.idTransaksi, rawTime)
+                                        cal?.timeInMillis ?: (nestedTrx?.tanggalTransaksi ?: System.currentTimeMillis())
+                                    } catch (e: Exception) {
+                                        nestedTrx?.tanggalTransaksi ?: System.currentTimeMillis()
+                                    }
+
+                                    val mappedItems = relatedItems.map { 
+                                        com.example.data.TransactionItem(
+                                            itemId = it.id,
+                                            namaBarang = it.namaItem,
+                                            qty = it.jumlah,
+                                            harga = it.harga.toLong(),
+                                            subTotal = (it.jumlah * it.harga).toLong()
                                         )
                                     }
+
+                                    val totalHarga = relatedItems.sumOf { (it.jumlah * it.harga).toLong() }
+                                    val diskonNominal = nestedTrx?.diskonNominal ?: 0L
+                                    val totalSetelahDiskon = if (diskonNominal > 0) (totalHarga - diskonNominal).coerceAtLeast(0L) else totalHarga
+
+                                    com.example.data.Transaction(
+                                        kodeTransaksi = item.idTransaksi,
+                                        tanggalTransaksi = timestamp,
+                                        items = mappedItems,
+                                        totalHarga = totalHarga,
+                                        diskonPersen = nestedTrx?.diskonPersen ?: 0.0,
+                                        diskonNominal = diskonNominal,
+                                        totalSetelahDiskon = totalSetelahDiskon
+                                    )
+                                } else {
+                                    nestedTrx
                                 }
 
                                 if (transaction != null) {
@@ -1649,13 +2442,23 @@ fun PenjualanTabContent(
                         ) {
                             Text("Cetak Ulang")
                         }
+                        if (isOwner) {
+                            TextButton(
+                                onClick = {
+                                    transactionIdToDelete = item.idTransaksi
+                                    selectedItemForDetail = null
+                                }
+                            ) {
+                                Text("Hapus", color = DangerColor)
+                            }
+                        }
                         TextButton(onClick = { selectedItemForDetail = null }) {
                             Text("Tutup")
                         }
                     }
                 },
                 dismissButton = {
-                    if (!item.namaItem.startsWith("❌")) {
+                    if (!isOwner && !item.namaItem.startsWith("❌")) {
                         TextButton(
                             onClick = {
                                 showCancelConfirmation = item
@@ -2592,17 +3395,8 @@ fun LabaRugiTabContent(
         return idTransaksi.substring(4, 12)
     }
 
-    fun getCalendarForTrx(idTransaksi: String): java.util.Calendar? {
-        val dateStr = getTrxDateStr(idTransaksi)
-        return try {
-            val sdf = java.text.SimpleDateFormat("yyyyMMdd", java.util.Locale.getDefault())
-            val date = sdf.parse(dateStr) ?: return null
-            val cal = java.util.Calendar.getInstance()
-            cal.time = date
-            cal
-        } catch (e: Exception) {
-            null
-        }
+    fun getCalendarForTrx(idTransaksi: String, waktu: String = ""): java.util.Calendar? {
+        return parseTrxDate(idTransaksi, waktu)
     }
 
     fun getCalendarForBiaya(tanggalStr: String): java.util.Calendar? {
@@ -2617,8 +3411,8 @@ fun LabaRugiTabContent(
         }
     }
 
-    fun isTrxMatchingFilter(idTransaksi: String, filter: String): Boolean {
-        val cal = getCalendarForTrx(idTransaksi) ?: return false
+    fun isTrxMatchingFilter(idTransaksi: String, waktu: String, filter: String): Boolean {
+        val cal = getCalendarForTrx(idTransaksi, waktu) ?: return false
         val today = java.util.Calendar.getInstance()
         return when (filter) {
             "Hari Ini" -> {
@@ -2683,7 +3477,7 @@ fun LabaRugiTabContent(
         if (selectedLabaDateFilter == "Semua") {
             transaksiList
         } else {
-            transaksiList.filter { isTrxMatchingFilter(it.idTransaksi, selectedLabaDateFilter) }
+            transaksiList.filter { isTrxMatchingFilter(it.idTransaksi, it.waktu, selectedLabaDateFilter) }
         }
     }
 
@@ -3746,7 +4540,7 @@ fun BarangTabContent(
                                                     categoryToEditIndex = null
                                                 }) {
                                                     Icon(
-                                                        imageVector = Icons.Filled.Check,
+                                                        imageVector = AppIcons.Check,
                                                         contentDescription = "Simpan",
                                                         tint = MaterialTheme.colorScheme.primary
                                                     )

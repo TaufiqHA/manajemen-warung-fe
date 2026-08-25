@@ -40,6 +40,7 @@ object AppIcons {
 
 
     // Status
+    val Check: ImageVector = Icons.Rounded.Check
     val Success: ImageVector = Icons.Rounded.CheckCircle
     val Error: ImageVector = Icons.Rounded.Error
     val Warning: ImageVector = Icons.Rounded.Warning
