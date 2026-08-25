@@ -35,6 +35,7 @@ import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.rememberScrollState
 import com.example.data.InvoiceItem
 import com.example.data.TransactionModel
@@ -364,7 +365,10 @@ fun ActiveOrdersTabContent(
             title = { Text("Struk Pembayaran (Kasir)") },
             text = {
                 Surface(
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(max = 420.dp)
+                        .verticalScroll(rememberScrollState()),
                     color = Color.White,
                     shape = RoundedCornerShape(4.dp),
                     border = androidx.compose.foundation.BorderStroke(1.dp, Color.LightGray)
@@ -521,7 +525,10 @@ fun ActiveOrdersTabContent(
             title = { Text("Struk Dapur") },
             text = {
                 Surface(
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(max = 420.dp)
+                        .verticalScroll(rememberScrollState()),
                     color = Color.White,
                     shape = RoundedCornerShape(4.dp),
                     border = androidx.compose.foundation.BorderStroke(1.dp, Color.LightGray)
@@ -579,7 +586,12 @@ fun ActiveOrdersTabContent(
             onDismissRequest = { showPaymentDialog = null },
             title = { Text("Pilih Metode Pembayaran") },
             text = {
-                Column {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(max = 420.dp)
+                        .verticalScroll(rememberScrollState())
+                ) {
                     Text("Total Pesanan: ${formatRupiah(transaction.totalHarga)}", color = Color.Gray)
                     Spacer(modifier = Modifier.height(8.dp))
                     
@@ -663,7 +675,8 @@ fun ActiveOrdersTabContent(
                                 isPaying = false
                                 showPaymentDialog = null
                                 
-                                showReceiptDialog = transaction.copy(
+                                val latestTransaction = nestedTransactions.find { it.kodeTransaksi == transaction.kodeTransaksi } ?: transaction
+                                showReceiptDialog = latestTransaction.copy(
                                     diskonPersen = if (isDiscountPercent) discountAmount.toDouble() else 0.0,
                                     diskonNominal = if (!isDiscountPercent) discountAmount else diskonNominal,
                                     totalSetelahDiskon = totalAfterDiscount,

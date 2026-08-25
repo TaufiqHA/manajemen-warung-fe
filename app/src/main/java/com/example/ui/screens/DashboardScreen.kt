@@ -1084,8 +1084,30 @@ fun PenjualanTabContent(
             Spacer(modifier = Modifier.height(8.dp))
 
             // Grouping: Pertama gabungkan item per struk (idTransaksi), lalu urutkan dari yang terbaru, lalu group berdasarkan Tanggal
-            val groupedByDate = remember(transaksiList.toList()) {
-                val completedList = transaksiList.filter { it.orderStatus == "COMPLETED" || it.orderStatus == null }
+            val groupedByDate = remember(transaksiList.toList(), role) {
+                val todayCal = java.util.Calendar.getInstance()
+                val todayIdStr = java.text.SimpleDateFormat("yyyyMMdd", java.util.Locale.getDefault()).format(todayCal.time)
+                val todayIsoPrefix = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.getDefault()).format(todayCal.time)
+
+                val yesterdayCal = java.util.Calendar.getInstance().apply { add(java.util.Calendar.DAY_OF_YEAR, -1) }
+                val yesterdayIdStr = java.text.SimpleDateFormat("yyyyMMdd", java.util.Locale.getDefault()).format(yesterdayCal.time)
+                val yesterdayIsoPrefix = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.getDefault()).format(yesterdayCal.time)
+
+                val isAdmin = (role != UserRole.OWNER.displayName)
+
+                val completedList = transaksiList.filter { 
+                    val isCompleted = (it.orderStatus == "COMPLETED" || it.orderStatus == null)
+                    if (!isCompleted) return@filter false
+
+                    if (isAdmin) {
+                        val matchesToday = it.idTransaksi.contains(todayIdStr) || it.waktu.startsWith(todayIsoPrefix)
+                        val matchesYesterday = it.idTransaksi.contains(yesterdayIdStr) || it.waktu.startsWith(yesterdayIsoPrefix)
+                        matchesToday || matchesYesterday
+                    } else {
+                        true
+                    }
+                }
+
                 val trxsById = completedList.groupBy { it.idTransaksi }
                 trxsById.entries
                     .sortedByDescending { it.value.firstOrNull()?.waktu ?: "" }
@@ -1097,8 +1119,8 @@ fun PenjualanTabContent(
             
             val expandedStates = remember { mutableStateMapOf<String, Boolean>() }
 
-            // Pengecekan kondisi kosong dikembalikan ke transaksiList keseluruhan
-            if (transaksiList.isEmpty()) {
+            // Pengecekan kondisi kosong
+            if (groupedByDate.isEmpty()) {
                 Box(
                     modifier = Modifier
                         .weight(1f)
@@ -1109,7 +1131,11 @@ fun PenjualanTabContent(
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
                         Icon(AppIcons.Store, contentDescription = null, modifier = Modifier.size(64.dp), tint = Color.LightGray)
                         Spacer(modifier = Modifier.height(12.dp))
-                        Text("Belum ada transaksi hari ini", style = MaterialTheme.typography.bodyMedium, color = Color.Gray)
+                        Text(
+                            text = if (role != UserRole.OWNER.displayName) "Belum ada transaksi hari ini dan kemarin" else "Belum ada transaksi",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = Color.Gray
+                        )
                     }
                 }
             } else {
@@ -1712,7 +1738,10 @@ fun PenjualanTabContent(
                 title = { Text("Detail Transaksi", fontWeight = FontWeight.Bold) },
                 text = {
                     Column(
-                        modifier = Modifier.fillMaxWidth(),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(max = 420.dp)
+                            .verticalScroll(rememberScrollState()),
                         verticalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -1802,59 +1831,81 @@ fun PenjualanTabContent(
                     ) {
                         TextButton(
                             onClick = {
-                                var transaction = storageHelper.getNestedTransactions().find { it.kodeTransaksi == item.idTransaksi }
+                                val relatedItems = transaksiList.filter { it.idTransaksi == item.idTransaksi }
+                                val cachedTrx = storageHelper.getNestedTransactions().find { it.kodeTransaksi == item.idTransaksi }
                                 
-                                if (transaction == null) {
-                                    // Rekonstruksi dari transaksiList (data API)
-                                    val relatedItems = transaksiList.filter { it.idTransaksi == item.idTransaksi }
-                                    if (relatedItems.isNotEmpty()) {
-                                        val firstItem = relatedItems.first()
-                                        val rawTime = firstItem.waktu
-                                        
-                                        val timestamp = try {
-                                            if (rawTime.contains("T")) {
-                                                val formats = listOf(
-                                                    "yyyy-MM-dd'T'HH:mm:ss.SSSSSS'Z'",
-                                                    "yyyy-MM-dd'T'HH:mm:ss.SSS'Z'",
-                                                    "yyyy-MM-dd'T'HH:mm:ss'Z'"
-                                                )
-                                                var parsedDate: java.util.Date? = null
-                                                for (fmt in formats) {
-                                                    try {
-                                                        val parser = java.text.SimpleDateFormat(fmt, java.util.Locale.getDefault())
-                                                        parser.timeZone = java.util.TimeZone.getTimeZone("UTC")
-                                                        parsedDate = parser.parse(rawTime)
-                                                        if (parsedDate != null) break
-                                                    } catch (e: Exception) {}
-                                                }
-                                                parsedDate?.time ?: System.currentTimeMillis()
-                                            } else {
-                                                rawTime.toLongOrNull() ?: System.currentTimeMillis()
+                                var transaction: com.example.data.Transaction? = null
+                                
+                                if (relatedItems.isNotEmpty()) {
+                                    val firstItem = relatedItems.first()
+                                    val rawTime = firstItem.waktu
+                                    
+                                    val timestamp = try {
+                                        if (rawTime.contains("T")) {
+                                            val formats = listOf(
+                                                "yyyy-MM-dd'T'HH:mm:ss.SSSSSS'Z'",
+                                                "yyyy-MM-dd'T'HH:mm:ss.SSS'Z'",
+                                                "yyyy-MM-dd'T'HH:mm:ss'Z'"
+                                            )
+                                            var parsedDate: java.util.Date? = null
+                                            for (fmt in formats) {
+                                                try {
+                                                    val parser = java.text.SimpleDateFormat(fmt, java.util.Locale.getDefault())
+                                                    parser.timeZone = java.util.TimeZone.getTimeZone("UTC")
+                                                    parsedDate = parser.parse(rawTime)
+                                                    if (parsedDate != null) break
+                                                } catch (e: Exception) {}
                                             }
-                                        } catch (e: Exception) {
-                                            System.currentTimeMillis()
+                                            parsedDate?.time ?: System.currentTimeMillis()
+                                        } else {
+                                            rawTime.toLongOrNull() ?: System.currentTimeMillis()
                                         }
-
-                                        transaction = com.example.data.Transaction(
-                                            kodeTransaksi = item.idTransaksi,
-                                            tanggalTransaksi = timestamp,
-                                            items = relatedItems.map { 
-                                                com.example.data.TransactionItem(
-                                                    itemId = it.id,
-                                                    namaBarang = it.namaItem,
-                                                    qty = it.jumlah,
-                                                    harga = it.harga.toLong()
-                                                )
-                                            },
-                                            totalHarga = relatedItems.sumOf { (it.jumlah * it.harga).toLong() },
-                                            totalSetelahDiskon = relatedItems.sumOf { (it.jumlah * it.harga).toLong() }
-                                        )
+                                    } catch (e: Exception) {
+                                        System.currentTimeMillis()
                                     }
+
+                                    val trxDiscountAmount = firstItem.discountAmount ?: (cachedTrx?.diskonNominal?.toDouble() ?: 0.0)
+                                    val baseTotal = relatedItems.sumOf { (it.jumlah * it.harga).toLong() - (it.itemDiscount?.toLong() ?: 0L) }
+                                    val finalTotal = (baseTotal - trxDiscountAmount.toLong()).coerceAtLeast(0L)
+
+                                    transaction = com.example.data.Transaction(
+                                        kodeTransaksi = item.idTransaksi,
+                                        tanggalTransaksi = timestamp,
+                                        customerName = firstItem.finalCustomerName.ifBlank { cachedTrx?.customerName ?: "" },
+                                        status = firstItem.orderStatus ?: (cachedTrx?.status ?: "COMPLETED"),
+                                        items = relatedItems.map { 
+                                            com.example.data.TransactionItem(
+                                                itemId = it.id,
+                                                namaBarang = it.namaItem,
+                                                qty = it.jumlah,
+                                                harga = it.harga.toLong(),
+                                                subTotal = (it.jumlah * it.harga).toLong() - (it.itemDiscount?.toLong() ?: 0L),
+                                                servedQty = it.servedQty
+                                            )
+                                        },
+                                        totalHarga = baseTotal,
+                                        diskonPersen = cachedTrx?.diskonPersen ?: 0.0,
+                                        diskonNominal = trxDiscountAmount.toLong(),
+                                        totalSetelahDiskon = finalTotal
+                                    )
+
+                                    // Update local nested transactions cache to keep it fresh
+                                    val nestedList = storageHelper.getNestedTransactions().toMutableList()
+                                    val existingIdx = nestedList.indexOfFirst { it.kodeTransaksi == item.idTransaksi }
+                                    if (existingIdx != -1) {
+                                        nestedList[existingIdx] = transaction
+                                    } else {
+                                        nestedList.add(transaction)
+                                    }
+                                    storageHelper.saveNestedTransactions(nestedList)
+                                } else if (cachedTrx != null) {
+                                    transaction = cachedTrx
                                 }
 
                                 if (transaction != null) {
                                     currentTransaction = transaction
-                                    receiptText = salesViewModel.formatReceipt(transaction)
+                                    val paymentMethod = relatedItems.firstOrNull()?.metodePembayaran ?: item.metodePembayaran
+                                    receiptText = salesViewModel.formatReceipt(transaction, paymentMethod)
                                     showReceiptDialog = true
                                 } else {
                                     coroutineScope.launch {
@@ -1893,7 +1944,10 @@ fun PenjualanTabContent(
                 title = { Text("Struk Penjualan") },
                 text = {
                     Surface(
-                        modifier = Modifier.fillMaxWidth(),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(max = 420.dp)
+                            .verticalScroll(rememberScrollState()),
                         color = Color.White,
                         shape = RoundedCornerShape(4.dp),
                         border = androidx.compose.foundation.BorderStroke(1.dp, Color.LightGray)

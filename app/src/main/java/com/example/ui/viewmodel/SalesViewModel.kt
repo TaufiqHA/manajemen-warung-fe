@@ -101,6 +101,8 @@ class SalesViewModel(application: Application) : AndroidViewModel(application) {
                         )
                     }
 
+                    storageHelper.saveTransaksiList(flatList)
+                    storageHelper.saveNestedTransactions(newTransactions)
                     _activeOrders.value = newTransactions
                 }
             } catch (e: Exception) {}
@@ -154,6 +156,7 @@ class SalesViewModel(application: Application) : AndroidViewModel(application) {
                         com.example.data.UpdateStatusRequest(newStatus, validPaymentMethod, discountAmount)
                     )
                 if (response.isSuccessful) {
+                    storageHelper.updateTransactionStatus(kodeTransaksi, newStatus)
                     fetchActiveOrders()
                     launch(Dispatchers.Main) { onSuccess() }
                 } else {
